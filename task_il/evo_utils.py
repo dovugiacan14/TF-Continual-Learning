@@ -341,6 +341,8 @@ class Utils(object):
         _str.extend(part2)
         # print('\n'.join(_str))
         file_name = './scripts/%s.py' % (indi.id)
+        # Create scripts directory if it doesn't exist
+        os.makedirs('./scripts', exist_ok=True)
         script_file_handler = open(file_name, 'w')
         script_file_handler.write('\n'.join(_str))
         script_file_handler.flush()
