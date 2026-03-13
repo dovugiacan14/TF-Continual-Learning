@@ -1,15 +1,10 @@
 from evo_utils import Utils, GPUTools
 import importlib
-from multiprocessing import Process, set_start_method
 import time, os, sys
 from asyncio.tasks import sleep
 
-# Set spawn method for CUDA compatibility (required for Kaggle/Colab)
-try:
-    set_start_method('spawn')
-except RuntimeError:
-    # Method might already be set, ignore error
-    pass
+# FOR KAGGLE/COLAB: Disable multiprocessing for CUDA compatibility
+# Run sequential instead of parallel
 
 
 class FitnessEvaluate(object):
@@ -61,10 +56,8 @@ class FitnessEvaluate(object):
                         _module = importlib.import_module('.', module_name)
                     _class = getattr(_module, 'RunModel')
                     cls_obj = _class()
-                    p = Process(target=cls_obj.do_work, args=('%d'%(gpu_id), file_name,))
-                    p.start()
-                    # Wait for process to finish before starting next one (for spawn method + CUDA)
-                    p.join()
+                    # FOR KAGGLE/COLAB: Run directly instead of using Process (CUDA compatible)
+                    cls_obj.do_work('%d' % gpu_id, file_name)
             else:
                 file_name = indi.id
                 self.log.info('%s has inherited the fitness as %.5f, no need to evaluate'%(file_name, indi.acc))
