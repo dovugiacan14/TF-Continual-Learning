@@ -120,21 +120,37 @@ class TrainModel(object):
 
         self.log_record(str(aps))
         self.log_record(str(afs))
+
+        # Calculate AIA (Average Incremental Accuracy)
         aia = 0.0
         for ap in aps:
             aia += ap
         aia /= acc.shape[1]
         aia *= 100
         self.log_record('aia:%.3f' % aia)
+
+        # Calculate AP (Average Precision - mean of all APs)
+        ap = sum(aps) / len(aps) * 100
+        self.log_record('ap:%.3f' % ap)
+
+        # Calculate AF (Average Forgetting - mean of all AFs)
+        if len(afs) > 0:
+            af = sum(afs) / len(afs) * 100
+        else:
+            af = 0.0
+        self.log_record('af:%.3f' % af)
+
+        # Calculate FA (Final Accuracy)
         final_acc = 0.0
         for k in range(acc.shape[1]):
             final_acc += float(acc[-1, k])
         final_acc /= acc.shape[1]
         final_acc *= 100
-        af = afs[-1] * 100
-        self.log_record('aa:%.3f' % final_acc)
-        self.log_record('af:%.3f' % af)
+        self.log_record('fa:%.3f' % final_acc)
+
         self.log_record('Done!')
+        # Return AIA for fitness evaluation, but also store other metrics
+        self.metrics = {'aia': round(aia, 3), 'ap': round(ap, 3), 'af': round(af, 3), 'fa': round(final_acc, 3)}
         return round(aia, 3)
 
 class RunModel(object):
@@ -151,10 +167,13 @@ class RunModel(object):
             print('Exception occurs, file:%s, pid:%d...%s'%(file_id, os.getpid(), str(e)))
             m.log_record('Exception occur:%s'%(str(e)))
         finally:
-            m.log_record('Finished-Acc:%.4f'%best_acc)
+            # Get all 4 metrics from the model
+            metrics = getattr(m, 'metrics', {'aia': best_acc, 'ap': 0.0, 'af': 0.0, 'fa': 0.0})
+            m.log_record('Finished-AIA:%.3f, AP:%.3f, AF:%.3f, FA:%.3f'%(metrics['aia'], metrics['ap'], metrics['af'], metrics['fa']))
 
             f = open('./populations/after_%s.txt'%(file_id[4:6]), 'a+')
-            f.write('%s=%.5f\n'%(file_id, best_acc))
+            # Write all 4 metrics in format: indiXXXX={aia:73.074, ap:73.074, af:6.976, fa:70.570}
+            f.write('%s={aia:%.3f, ap:%.3f, af:%.3f, fa:%.3f}\n'%(file_id, metrics['aia'], metrics['ap'], metrics['af'], metrics['fa']))
             f.flush()
             f.close()
 """

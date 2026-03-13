@@ -124,20 +124,32 @@ class TrainModel(object):
             print()
         print('*' * 100)
         print(aps)
+        print(afs)
+
+        # Calculate AIA (Average Incremental Accuracy)
         aia = 0.0
         for ap in aps:
             aia += ap
         aia /= len(taskcla)
         print('aia:%.5f' % aia)
-        print(afs)
+
+        # Calculate AP (Average Precision - mean of all APs)
+        ap = sum(aps) / len(aps) if len(aps) > 0 else 0.0
+        print('ap:%.5f' % ap)
+
+        # Calculate AF (Average Forgetting - mean of all AFs)
+        af = sum(afs) / len(afs) if len(afs) > 0 else 0.0
+        print('af:%.5f' % af)
+
+        # Calculate FA (Final Accuracy)
         final_acc = 0.0
         for k in range(acc.shape[1]):
             final_acc += float(acc[-1, k])
         final_acc /= acc.shape[1]
-        round(final_acc, 5)
-        print('final_acc:%.5f' % final_acc)
+        print('fa:%.5f' % final_acc)
+
         print('Done!')
-        return final_acc
+        return aia  # Return AIA for consistency with template.py
 
 if __name__ == '__main__':
     run_test()

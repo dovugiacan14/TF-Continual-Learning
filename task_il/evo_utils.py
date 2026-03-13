@@ -280,8 +280,22 @@ class Utils(object):
             f = open(after_file_path)
             for line in f:
                 if len(line.strip()) > 0:
-                    line = line.strip().split('=')
-                    fitness_map[line[0]] = float(line[1])
+                    # New format: indiXXXX={aia:73.074, ap:73.074, af:6.976, fa:70.570}
+                    parts = line.strip().split('=')
+                    indi_id = parts[0]
+                    metrics_str = parts[1]
+                    # Remove curly braces and split by comma
+                    metrics_str = metrics_str.replace('{', '').replace('}', '')
+                    metrics_parts = metrics_str.split(',')
+                    # Parse each metric
+                    for metric in metrics_parts:
+                        key_value = metric.strip().split(':')
+                        if len(key_value) == 2:
+                            key = key_value[0].strip()
+                            value = float(key_value[1].strip())
+                            if key == 'aia':
+                                fitness_map[indi_id] = value  # Use AIA for fitness
+                                break
             f.close()
 
             for indi in pop.individuals:
