@@ -105,10 +105,13 @@ class GPUTools(object):
         output_info = p.stdout.read().decode('UTF-8')
         lines = output_info.split(os.linesep)
         equipped_gpu_ids = []
+        gpu_index = 0
         for line_info in lines:
             if not line_info.startswith(' '):
-                if 'GeForce' in line_info:
-                    equipped_gpu_ids.append(line_info.strip().split(' ', 4)[3])
+                # Support both GeForce and Tesla GPUs (for Kaggle)
+                if 'GeForce' in line_info or 'Tesla' in line_info:
+                    equipped_gpu_ids.append(str(gpu_index))
+                    gpu_index += 1
             else:
                 break
 
@@ -140,6 +143,19 @@ class GPUTools(object):
 
     @classmethod
     def detect_available_gpu_id(cls):
+        # Try PyTorch CUDA detection first (more reliable for Kaggle)
+        try:
+            import torch
+            if torch.cuda.is_available():
+                gpu_count = torch.cuda.device_count()
+                Log.info('GPU_QUERY-PyTorch detected %d GPU(s)' % gpu_count)
+                # Use GPU 0 by default for Kaggle
+                Log.info('GPU_QUERY-Using GPU#0')
+                return 0
+        except:
+            pass
+
+        # Fallback to nvidia-smi method
         unused_gpu_ids = cls.get_available_gpu_ids()
         #if '1' in unused_gpu_ids:
         #    unused_gpu_ids.remove('1')
