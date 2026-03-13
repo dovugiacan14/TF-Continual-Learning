@@ -16,8 +16,8 @@ import copy
 
 def run_evolve():
     params = {}
-    params['pop_size'] = 2    # Population size
-    params['max_gen'] = 3    # Maximum number of iteration generations
+    params['pop_size'] = 20    # Population size
+    params['max_gen'] = 3000    # Maximum number of iteration generations
     evoCNN = EvolveCNN(params)
     evoCNN.do_work(params)
 
