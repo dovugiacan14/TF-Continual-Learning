@@ -296,27 +296,35 @@ class Utils(object):
             f = open(after_file_path)
             for line in f:
                 if len(line.strip()) > 0:
+                    # Handle both old and new formats
+                    # Old format: indiXXXX=77.466
                     # New format: indiXXXX={aia:73.074, ap:73.074, af:6.976, fa:70.570}
                     parts = line.strip().split('=')
                     indi_id = parts[0]
-                    metrics_str = parts[1]
-                    # Remove curly braces and split by comma
-                    metrics_str = metrics_str.replace('{', '').replace('}', '')
-                    metrics_parts = metrics_str.split(',')
-                    # Parse each metric
-                    for metric in metrics_parts:
-                        key_value = metric.strip().split(':')
-                        if len(key_value) == 2:
-                            key = key_value[0].strip()
-                            value = float(key_value[1].strip())
-                            if key == 'aia':
-                                fitness_map[indi_id] = value  # Use AIA for fitness
-                                break
+
+                    if '{' in parts[1]:
+                        # New format with metrics dict
+                        metrics_str = parts[1]
+                        # Remove curly braces and split by comma
+                        metrics_str = metrics_str.replace('{', '').replace('}', '')
+                        metrics_parts = metrics_str.split(',')
+                        # Parse each metric
+                        for metric in metrics_parts:
+                            key_value = metric.strip().split(':')
+                            if len(key_value) == 2:
+                                key = key_value[0].strip()
+                                value = float(key_value[1].strip())
+                                if key == 'aia':
+                                    fitness_map[indi_id] = value  # Use AIA for fitness
+                                    break
+                    else:
+                        # Old format with single value
+                        fitness_map[indi_id] = float(parts[1])
             f.close()
 
             for indi in pop.individuals:
                 if indi.id in fitness_map:
-                    indi.acc = fitness_map[indi.id]
+                    indi.acc = fitness_map[indi_id]
 
         return pop
 
