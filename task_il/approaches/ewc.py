@@ -6,6 +6,7 @@ from copy import deepcopy
 
 import utils
 
+
 class Appr(object):
     """ Class implementing the Elastic Weight Consolidation approach described in http://arxiv.org/abs/1612.00796 """
 

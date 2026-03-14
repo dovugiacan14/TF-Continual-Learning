@@ -24,7 +24,7 @@ def set_seed(seed):
 
 def run_test():
     indi_no = 0
-    code=[2, 16, [0, 1, 1, 2, 2], [1, 1, 1, 2, 2]]   # AlexAC-A, about 6.28M
+    code=[3, 32, [1, 2, 2, 3, 3], [2, 2, 3, 3, 3]]  # AlexAC-A, about 6.28M
     #code=[2, 32, [1, 1, 2, 2, 2], [0, 1, 2, 2, 2]]    # AlexAC-B, about 0.92M
     network_choices = ['arch_craft', 'alexnet']
     chosen_network = network_choices[0]
