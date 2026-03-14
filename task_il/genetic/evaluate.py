@@ -36,7 +36,7 @@ class FitnessEvaluate(object):
         for indi in self.individuals:
             if indi.acc < 0:
                 has_evaluated_offspring = True
-                time.sleep(2)
+                # time.sleep(2)
                 gpu_id = GPUTools.detect_available_gpu_id()
                 while gpu_id is None:
                     time.sleep(2)
@@ -66,7 +66,7 @@ class FitnessEvaluate(object):
             all_finished = False
             while all_finished is not True:
                 has_nums = 0
-                time.sleep(2)
+                # time.sleep(2)
                 file_name = './populations/after_%s.txt' % (self.individuals[0].id[4:6])
                 assert os.path.exists(file_name) is True
                 f = open(file_name, 'r')
@@ -115,7 +115,7 @@ class FitnessEvaluate(object):
                 if indi.acc == -1:
                     if indi.id not in fitness_map:
                         self.log.warn('The individuals have been evaluated, but the records are not correct, the fitness of %s does not exist in %s, wait 120 seconds'%(indi.id, file_name))
-                        sleep(5)
+                        # sleep(5)
                     indi.acc = fitness_map[indi.id]
 
             Utils.save_fitness_to_cache(self.individuals)
