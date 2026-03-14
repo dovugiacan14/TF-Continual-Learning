@@ -1,6 +1,7 @@
 import sys,time
 import numpy as np
 import torch
+import random
 from copy import deepcopy
 
 import utils
@@ -17,7 +18,7 @@ class Appr(object):
         self.sbatch=sbatch
         self.lr=lr
         self.clipgrad=clipgrad
-        _set_random()
+        set_seed(0)
 
         self.ce=torch.nn.CrossEntropyLoss()
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=0.9, weight_decay=2e-4)
@@ -130,11 +131,11 @@ class Appr(object):
 
         return self.ce(output,targets)+self.lamb*loss_reg
 
-def _set_random():
-    torch.manual_seed(1)
-    torch.cuda.manual_seed(1)
-    torch.cuda.manual_seed_all(1)
-    np.random.seed(1)
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     

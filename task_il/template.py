@@ -5,6 +5,8 @@ import sys
 from datetime import datetime
 import multiprocessing
 import numpy as np
+import torch
+import random
 import torch.backends.cudnn as cudnn
 import dataloaders.cifar100 as dataloader
 from networks.arch_craft import Net
@@ -23,6 +25,14 @@ if script_dir.endswith('scripts'):
     script_dir = os.path.dirname(script_dir)
 if os.getcwd() != script_dir:
     os.chdir(script_dir)
+
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 #generated_code
 class TrainModel(object):
@@ -47,13 +57,15 @@ class TrainModel(object):
         f.close()
 
     def process(self, s):
+        # Set seed BEFORE creating network for deterministic behavior
+        set_seed(s)
+
         depth = self.code[0]
         width = self.code[1]
         pool_code = copy.deepcopy(self.code[2])
         double_code = copy.deepcopy(self.code[3])
         data, taskcla, inputsize=dataloader.get(seed=s,pc_valid=0,inc=self.inc)
         net = Net(taskcla, depth, width, pool_code, double_code)
-        cudnn.benchmark = True
         net = net.cuda()
         total = sum([param.nelement() for param in net.parameters()])
         self.log_record('Number of parameter: %.4fM' % (total / 1e6))

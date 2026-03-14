@@ -1,7 +1,9 @@
 from __future__ import print_function
 import os
-import sys 
+import sys
 import numpy as np
+import torch
+import random
 import torch.backends.cudnn as cudnn
 import dataloaders.cifar100 as dataloader
 from approaches import sgd as approach
@@ -11,14 +13,23 @@ import copy
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 Inc_cls = 5    # Number of classes incremented at each step
 
+def set_seed(seed):
+    """Set random seed for reproducibility"""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
 def run_test():
     indi_no = 0
-    code=[2, 40, [1, 1, 2, 2, 2], [0, 0, 0, 1, 2]]    # AlexAC-A, about 6.28M
+    code=[2, 16, [0, 1, 1, 2, 2], [1, 1, 1, 2, 2]]   # AlexAC-A, about 6.28M
     #code=[2, 32, [1, 1, 2, 2, 2], [0, 1, 2, 2, 2]]    # AlexAC-B, about 0.92M
     network_choices = ['arch_craft', 'alexnet']
     chosen_network = network_choices[0]
     m = TrainModel(code=code, indi_no=indi_no, network_name=chosen_network)
-    m.process(1993)
+    m.process(0)
     
     return
 
@@ -33,6 +44,9 @@ class TrainModel(object):
         self.network_name = network_name
 
     def process(self, s):
+        # Set seed BEFORE creating network for deterministic behavior
+        set_seed(s)
+
         print('\n\n')
         print(self.file_id)
         depth = self.code[0]
@@ -51,7 +65,7 @@ class TrainModel(object):
         else:
             raise NotImplementedError("Unknown type {}".format(self.network_name))
 
-        cudnn.benchmark = True
+        # Already set by set_seed(), no need to set benchmark
         net = net.cuda()
         total = sum([param.nelement() for param in net.parameters()])
         print('Number of parameter: %.4fM' % (total / 1e6))
@@ -131,22 +145,24 @@ class TrainModel(object):
         for ap in aps:
             aia += ap
         aia /= len(taskcla)
-        print('aia:%.5f' % aia)
+        aia *= 100
+        print('aia:%.3f' % aia)
 
         # Calculate AP (Average Precision - mean of all APs)
-        ap = sum(aps) / len(aps) if len(aps) > 0 else 0.0
-        print('ap:%.5f' % ap)
+        ap = sum(aps) / len(aps) * 100 if len(aps) > 0 else 0.0
+        print('ap:%.3f' % ap)
 
         # Calculate AF (Average Forgetting - mean of all AFs)
-        af = sum(afs) / len(afs) if len(afs) > 0 else 0.0
-        print('af:%.5f' % af)
+        af = sum(afs) / len(afs) * 100 if len(afs) > 0 else 0.0
+        print('af:%.3f' % af)
 
         # Calculate FA (Final Accuracy)
         final_acc = 0.0
         for k in range(acc.shape[1]):
             final_acc += float(acc[-1, k])
         final_acc /= acc.shape[1]
-        print('fa:%.5f' % final_acc)
+        final_acc *= 100
+        print('fa:%.3f' % final_acc)
 
         print('Done!')
         return aia  # Return AIA for consistency with template.py
