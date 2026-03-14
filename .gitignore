@@ -7,3 +7,4 @@ __pycache__/
 main.log
 dat/
 task_il/data/
+results/

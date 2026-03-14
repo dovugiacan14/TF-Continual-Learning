@@ -9,15 +9,17 @@ if os.getcwd() != script_dir:
 
 from evo_utils import StatusUpdateTool, Utils, Log
 from genetic.population import Population, Individual
-from genetic.evaluate import FitnessEvaluate
 from genetic.mutation import Mutation
 import numpy as np
 import copy
+from genetic.evaluate_synflow import SynflowEvaluate
+from genetic.evaluate import FitnessEvaluate
 
 def run_evolve():
     params = {}
-    params['pop_size'] = 20    # Population size
-    params['max_gen'] = 3000    # Maximum number of iteration generations
+    params['pop_size'] = 2    # Population size
+    params['max_gen'] = 3    # Maximum number of iteration generations
+    params['eval_mode'] = 1     # Evaluation mode: 0=pytorch_train, 1=synflow
     evoCNN = EvolveCNN(params)
     evoCNN.do_work(params)
 
@@ -36,13 +38,23 @@ class EvolveCNN(object):
 
     # type==0 means 0-th
     def fitness_evaluate(self):
-        fitness = FitnessEvaluate(self.pops.individuals, Log)
+        eval_mode = self.params.get('eval_mode', 0)  # Default to pytorch_train mode
+
+        if eval_mode == 1:
+            # use Synflow 
+            fitness = SynflowEvaluate(self.pops.individuals, Log)
+            Log.info('Using Synflow evaluation mode (eval_mode=%d)' % eval_mode)
+        else:
+            # use PyTorch training evaluation mode
+            fitness = FitnessEvaluate(self.pops.individuals, Log)
+            Log.info('Using PyTorch training evaluation mode (eval_mode=%d)' % eval_mode)
+
         fitness.generate_to_python_file()
-        
+
         # for indi in self.pops.individuals:
         #     indi.acc = indi.code[1]/indi.code[0]
         # return None
-        
+
         fitness.evaluate()
 
     def generate_offspring(self):

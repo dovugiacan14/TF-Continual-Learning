@@ -108,7 +108,7 @@ class GPUTools(object):
         gpu_index = 0
         for line_info in lines:
             if not line_info.startswith(' '):
-                # Support both GeForce and Tesla GPUs (for Kaggle)
+                # Support both GeForce and Tesla GPUs
                 if 'GeForce' in line_info or 'Tesla' in line_info:
                     equipped_gpu_ids.append(str(gpu_index))
                     gpu_index += 1
@@ -143,13 +143,12 @@ class GPUTools(object):
 
     @classmethod
     def detect_available_gpu_id(cls):
-        # Try PyTorch CUDA detection first (more reliable for Kaggle)
+        # Try PyTorch CUDA detection first (more reliable for )
         try:
             import torch
             if torch.cuda.is_available():
                 gpu_count = torch.cuda.device_count()
                 Log.info('GPU_QUERY-PyTorch detected %d GPU(s)' % gpu_count)
-                # Use GPU 0 by default for Kaggle
                 Log.info('GPU_QUERY-Using GPU#0')
                 return 0
         except:
@@ -351,6 +350,39 @@ class Utils(object):
         return part1, part2
 
     @classmethod
+    def read_synflow_template(cls):
+        """Read template_synflow.py for Synflow-based evaluation"""
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        _path = os.path.join(script_dir, 'template_synflow.py')
+        part1 = []
+        part2 = []
+
+        with open(_path, 'r') as f:
+            lines = f.readlines()
+
+        # Skip first docstring
+        i = 0
+        if lines[i].strip() == '"""':
+            i += 1
+            while i < len(lines) and lines[i].strip() != '"""':
+                i += 1
+            i += 1  # Skip closing """
+
+        # Read until #generated_code
+        while i < len(lines) and lines[i].strip() != '#generated_code':
+            part1.append(lines[i].rstrip())
+            i += 1
+
+        i += 1  # Skip #generated_code line
+
+        # Read all remaining lines
+        while i < len(lines):
+            part2.append(lines[i].rstrip())
+            i += 1
+
+        return part1, part2
+
+    @classmethod
     def generate_pytorch_file(cls, indi):
         code = indi.code
 
@@ -371,6 +403,30 @@ class Utils(object):
         script_file_handler.write('\n'.join(_str))
         script_file_handler.flush()
         script_file_handler.close()
+
+    @classmethod
+    def generate_synflow_file(cls, indi):
+        """Generate Python file using Synflow template for fast evaluation"""
+        code = indi.code
+
+        part1, part2 = cls.read_synflow_template()
+        _str = []
+        current_time = time.strftime("%Y-%m-%d  %H:%M:%S")
+        _str.append('"""')
+        _str.append(current_time)
+        _str.append('"""')
+        _str.extend(part1)
+        _str.append('\ncode = %s' % str(code))
+        _str.extend(part2)
+
+        file_name = './scripts/%s.py' % (indi.id)
+        # Create scripts directory if it doesn't exist
+        os.makedirs('./scripts', exist_ok=True)
+        script_file_handler = open(file_name, 'w')
+        script_file_handler.write('\n'.join(_str))
+        script_file_handler.flush()
+        script_file_handler.close()
+        Log.info('Generated synflow file: %s' % file_name)
 
     @classmethod
     def write_to_file(cls, _str, _file):
