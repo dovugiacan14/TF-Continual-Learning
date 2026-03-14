@@ -157,7 +157,7 @@ class EvolveCNN(object):
             Log.info('EVOLVE[%d-gen]-Begin to evaluate the fitness'%(curr_gen))
             self.fitness_evaluate()
             Log.info('EVOLVE[%d-gen]-Finish the evaluation'%(curr_gen))
-            time.sleep(5)
+            time.sleep(2)
             self.environment_selection()
             Log.info('EVOLVE[%d-gen]-Finish the environment selection'%(curr_gen))
 

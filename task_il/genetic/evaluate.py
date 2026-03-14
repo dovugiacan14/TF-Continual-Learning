@@ -36,10 +36,10 @@ class FitnessEvaluate(object):
         for indi in self.individuals:
             if indi.acc < 0:
                 has_evaluated_offspring = True
-                time.sleep(5)
+                time.sleep(2)
                 gpu_id = GPUTools.detect_available_gpu_id()
                 while gpu_id is None:
-                    time.sleep(5)
+                    time.sleep(2)
                     gpu_id = GPUTools.detect_available_gpu_id()
                 if gpu_id is not None:
                     file_name = indi.id
@@ -66,7 +66,7 @@ class FitnessEvaluate(object):
             all_finished = False
             while all_finished is not True:
                 has_nums = 0
-                time.sleep(5)
+                time.sleep(2)
                 file_name = './populations/after_%s.txt' % (self.individuals[0].id[4:6])
                 assert os.path.exists(file_name) is True
                 f = open(file_name, 'r')
