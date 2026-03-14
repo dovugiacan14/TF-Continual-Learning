@@ -45,7 +45,7 @@ class FitnessEvaluate(object):
                 time.sleep(10)
                 gpu_id = GPUTools.detect_available_gpu_id()
                 while gpu_id is None:
-                    time.sleep(60)
+                    time.sleep(10)
                     gpu_id = GPUTools.detect_available_gpu_id()
                 if gpu_id is not None:
                     file_name = indi.id
