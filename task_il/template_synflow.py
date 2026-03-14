@@ -1,7 +1,6 @@
 """
 Synflow-based Template for Neural Architecture Evaluation
 Instead of training, this template uses Synaptic Flow to estimate network quality
-Reference: Lee et al. "Pruning neural networks without any data by conserving synaptic flow" (2019)
 
 Note: This version runs sequentially without multiprocessing (CUDA compatible)
 """
@@ -47,93 +46,138 @@ class SynflowEvaluator(object):
         f.close()
 
     def calculate_synflow(self, net):
+        """
+        Calculate Synflow score following the original paper:
+        'Pruning neural networks without any data by iteratively conserving synaptic flow'
+
+        Algorithm:
+        1. Linearize all weights: w = |w|
+        2. Forward pass with all-ones input
+        3. Loss = sum(output)
+        4. Backward pass
+        5. Synflow score = Σ|w * grad(w)|
+        6. Restore original weights
+
+        Note: Handles BatchNorm layers by freezing them during computation.
+        """
         net.eval()
 
-        # Create dummy inputs and targets (all ones)
+        # Handle BatchNorm: freeze BN stats to avoid issues with all-ones input
+        # (all-ones input has zero variance, which breaks BN)
+        bn_params = []
+        for module in net.modules():
+            if isinstance(module, (nn.BatchNorm2d, nn.BatchNorm1d)):
+                bn_params.append((module, module.training))
+                module.eval()  # Ensure BN uses running stats, not batch stats
+
+        # Clear any existing gradients before we start
+        net.zero_grad()
+
+        # Step 1: Linearize weights - store signs and set all weights to positive
+        # Use torch.no_grad() to avoid building unnecessary computational graph
+        signs = {}
+        with torch.no_grad():
+            for name, param in net.named_parameters():
+                signs[name] = torch.sign(param)  # Use param instead of param.data (PyTorch best practice)
+                param.abs_()  # In-place absolute value
+
+        # Step 2: Create all-ones dummy input
         # CIFAR-100 image size: 32x32x3
         dummy_input = torch.ones(1, 3, 32, 32).cuda()
 
-        # Get the number of tasks from the network
-        # For Task-IL, the network has multiple output heads
-        num_tasks = len(net.taskcla)
+        # Step 3: Forward pass
+        # For Task-IL, the network returns a list of outputs for all tasks
+        outputs = net(dummy_input)
 
-        total_synflow = 0.0
+        # Step 4: Calculate loss as sum of all outputs (as per original paper)
+        # This ensures gradients flow through all paths
+        # NOTE: Original SynFlow paper uses sum() WITHOUT abs()
+        loss = sum([output.sum() for output in outputs])
 
-        # Calculate synflow for each task head
-        for t in range(num_tasks):
-            # Get number of classes for this task
-            n_classes = net.taskcla[t][1]
+        # Step 5: Backward pass
+        loss.backward()
 
-            # Create dummy target (all ones, binary classification style)
-            dummy_output = torch.ones(1, n_classes).cuda()
+        # Step 6: Calculate synflow score: |w * grad(w)|
+        # IMPORTANT: Multiply FIRST, then abs() (as per original paper)
+        synflow_score = 0.0
+        for param in net.parameters():
+            if param.grad is not None:
+                synflow_score += torch.sum((param.grad * param).abs()).item()
 
-            # Enable gradient computation for input
-            dummy_input.requires_grad = True
+        # Step 7: Restore original weights
+        with torch.no_grad():
+            for name, param in net.named_parameters():
+                param *= signs[name]  # Use direct assignment instead of param.data
 
-            # Forward pass - net.forward() returns list of outputs for all tasks
-            outputs = net(dummy_input)
-            output = outputs[t]  # Get output for task t
+        # Restore BatchNorm training state if needed
+        for module, was_training in bn_params:
+            if was_training:
+                module.train()
 
-            # Binary cross-entropy style loss (as in original Synflow paper)
-            # This forces gradients to flow through all paths
-            loss = -torch.mean(torch.log(torch.sigmoid(output) + 1e-8) *
-                               dummy_output +
-                               torch.log(1 - torch.sigmoid(output) + 1e-8) *
-                               (1 - dummy_output))
+        # Clean up gradients
+        net.zero_grad()
 
-            # Backward pass
-            loss.backward()
-
-            # Calculate synflow score: |w * grad(w)|
-            synflow_score = 0.0
-            for param in net.parameters():
-                if param.grad is not None:
-                    synflow_score += torch.sum(torch.abs(param.data * param.grad)).item()
-
-            total_synflow += synflow_score
-
-            # Reset gradients
-            net.zero_grad()
-            if dummy_input.grad is not None:
-                dummy_input.grad.zero_()
-
-        return total_synflow
+        return synflow_score
 
     def calculate_synflow_per_layer(self, net):
+        """
+        Calculate per-layer synflow scores following the original paper.
+        Useful for analyzing which layers contribute most to gradient flow.
+
+        Note: Handles BatchNorm layers by freezing them during computation.
+        """
         net.eval()
 
-        dummy_input = torch.ones(1, 3, 32, 32).cuda()
-        num_tasks = len(net.taskcla)
+        # Handle BatchNorm: freeze BN stats to avoid issues with all-ones input
+        bn_params = []
+        for module in net.modules():
+            if isinstance(module, (nn.BatchNorm2d, nn.BatchNorm1d)):
+                bn_params.append((module, module.training))
+                module.eval()
 
-        layer_scores = {}
+        # Clear any existing gradients
+        net.zero_grad()
 
-        for t in range(num_tasks):
-            n_classes = net.taskcla[t][1]
-            dummy_output = torch.ones(1, n_classes).cuda()
-
-            dummy_input.requires_grad = True
-            # Forward pass - net.forward() returns list of outputs for all tasks
-            outputs = net(dummy_input)
-            output = outputs[t]  # Get output for task t
-
-            loss = -torch.mean(torch.log(torch.sigmoid(output) + 1e-8) *
-                               dummy_output +
-                               torch.log(1 - torch.sigmoid(output) + 1e-8) *
-                               (1 - dummy_output))
-
-            loss.backward()
-
-            # Collect scores per parameter tensor
+        # Step 1: Linearize weights
+        signs = {}
+        with torch.no_grad():
             for name, param in net.named_parameters():
-                if param.grad is not None:
-                    score = torch.sum(torch.abs(param.data * param.grad)).item()
-                    if name not in layer_scores:
-                        layer_scores[name] = 0.0
-                    layer_scores[name] += score
+                signs[name] = torch.sign(param)  # Use param instead of param.data (PyTorch best practice)
+                param.abs_()
 
-            net.zero_grad()
-            if dummy_input.grad is not None:
-                dummy_input.grad.zero_()
+        # Step 2: Create all-ones dummy input
+        dummy_input = torch.ones(1, 3, 32, 32).cuda()
+
+        # Step 3: Forward pass
+        outputs = net(dummy_input)
+
+        # Step 4: Calculate loss as sum of all outputs
+        # NOTE: Original SynFlow paper uses sum() WITHOUT abs()
+        loss = sum([output.sum() for output in outputs])
+
+        # Step 5: Backward pass
+        loss.backward()
+
+        # Step 6: Collect scores per parameter tensor
+        # IMPORTANT: Multiply FIRST, then abs() (as per original paper)
+        layer_scores = {}
+        for name, param in net.named_parameters():
+            if param.grad is not None:
+                score = torch.sum((param.grad * param).abs()).item()
+                layer_scores[name] = score
+
+        # Step 7: Restore original weights
+        with torch.no_grad():
+            for name, param in net.named_parameters():
+                param *= signs[name]  # Use direct assignment instead of param.data
+
+        # Restore BatchNorm training state if needed
+        for module, was_training in bn_params:
+            if was_training:
+                module.train()
+
+        # Clean up gradients
+        net.zero_grad()
 
         return layer_scores
 
@@ -156,15 +200,15 @@ class SynflowEvaluator(object):
         self.log_record('Number of parameters: %.4fM' % (total_params / 1e6))
 
         # Initialize network weights (important for Synflow)
-        # Use Kaiming initialization for better gradient flow
+        # Use Xavier uniform initialization for smaller weights and more stable synflow scores
         def init_weights(m):
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                nn.init.xavier_uniform_(m.weight, gain=1.0)
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
 
         net.apply(init_weights)
-        self.log_record('Network initialized with Kaiming normal')
+        self.log_record('Network initialized with Xavier uniform')
 
         # Calculate Synflow score
         self.log_record('Calculating Synflow score...')
@@ -184,7 +228,8 @@ class SynflowEvaluator(object):
 
         # Use normalized synflow score as fitness metric
         # Higher synflow = better gradient flow = potentially better architecture
-        fitness_score = normalized_synflow * 1000  # Scale up for easier handling
+        # No need to scale - normalized score is already meaningful
+        fitness_score = normalized_synflow
 
         self.log_record('Fitness score (Synflow): %.3f' % fitness_score)
 
