@@ -67,24 +67,55 @@ class StatusUpdateTool(object):
 
 class Log(object):
     _logger = None
+    _quiet_mode = False  # Default: verbose mode
+
+    @classmethod
+    def set_quiet_mode(cls, quiet=True):
+        """Set quiet mode to reduce terminal output for Kaggle"""
+        cls._quiet_mode = quiet
+        if cls._logger is not None:
+            # Reconfigure logger with new settings
+            cls._configure_logger()
+
+    @classmethod
+    def _configure_logger(cls):
+        """Configure logger based on current mode"""
+        if cls._logger is not None:
+            # Remove all handlers
+            for handler in cls._logger.handlers[:]:
+                cls._logger.removeHandler(handler)
+
+        logger = logging.getLogger("EvoCNN")
+        formatter = logging.Formatter('%(asctime)s %(levelname)-8s: %(message)s')
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        log_file = os.path.join(script_dir, "main.log")
+
+        # File handler - always log everything (INFO level)
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setFormatter(formatter)
+        file_handler.setLevel(logging.INFO)
+        logger.addHandler(file_handler)
+
+        # Console handler - depends on mode
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(formatter)
+
+        if cls._quiet_mode:
+            # Quiet mode: only log WARNING and above to terminal
+            console_handler.setLevel(logging.WARNING)
+        else:
+            # Verbose mode: log INFO to terminal
+            console_handler.setLevel(logging.INFO)
+
+        logger.addHandler(console_handler)
+        logger.setLevel(logging.INFO)
+        cls._logger = logger
+        return logger
 
     @classmethod
     def __get_logger(cls):
         if Log._logger is None:
-            logger = logging.getLogger("EvoCNN")
-            formatter = logging.Formatter('%(asctime)s %(levelname)-8s: %(message)s')
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            log_file = os.path.join(script_dir, "main.log")
-            file_handler = logging.FileHandler(log_file)
-            file_handler.setFormatter(formatter)
-
-            console_handler = logging.StreamHandler(sys.stdout)
-            console_handler.formatter = formatter
-            logger.addHandler(file_handler)
-            logger.addHandler(console_handler)
-            logger.setLevel(logging.INFO)
-            Log._logger = logger
-            return logger
+            return cls._configure_logger()
         else:
             return Log._logger
 
@@ -95,6 +126,11 @@ class Log(object):
     @classmethod
     def warn(cls, _str):
         cls.__get_logger().warn(_str)
+
+    @classmethod
+    def important(cls, _str):
+        """Log important message that should always show in terminal"""
+        cls.__get_logger().warning(_str)  # Use WARNING level to bypass quiet mode
 
 
 class GPUTools(object):

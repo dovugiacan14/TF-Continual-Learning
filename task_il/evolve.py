@@ -1,6 +1,7 @@
 import random
 import time
 import os
+from datetime import datetime
 
 # Auto-detect and change to correct working directory
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -19,7 +20,7 @@ def run_evolve():
     params = {}
     params['pop_size'] = 2    # Population size
     params['max_gen'] = 3    # Maximum number of iteration generations
-    params['eval_mode'] = 1     # Evaluation mode: 0=pytorch_train, 1=synflow
+    params['eval_mode'] = 0     # Evaluation mode: 0=pytorch_train, 1=synflow
     evoCNN = EvolveCNN(params)
     evoCNN.do_work(params)
 
@@ -106,8 +107,23 @@ class EvolveCNN(object):
         self.pops.gen_no += 1
 
     def do_work(self, params):
+        # Enable quiet mode for Kaggle (reduce terminal output)
+        Log.set_quiet_mode(quiet=True)
+
         max_gen = params['max_gen']
-        Log.info('*'*25)
+        pop_size = params['pop_size']
+        eval_mode = params.get('eval_mode', 0)
+        eval_mode_str = 'Synflow' if eval_mode == 1 else 'PyTorch Train'
+
+        # START SIGNAL - Important information
+        Log.important('='*60)
+        Log.important('EVOLUTION STARTED')
+        Log.important(f'Mode: {eval_mode_str}')
+        Log.important(f'Max Generations: {max_gen}')
+        Log.important(f'Population Size: {pop_size}')
+        Log.important(f'Start Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
+        Log.important('='*60)
+
         # the step 1
         if StatusUpdateTool.is_evolution_running():
             Log.info('Initialize from existing population data')
@@ -129,6 +145,9 @@ class EvolveCNN(object):
         gen_no += 1
         self.pops.gen_no += 1
         for curr_gen in range(gen_no, max_gen):
+            # GENERATION PROGRESS - Important information
+            Log.important(f'Generation {curr_gen}/{max_gen} completed')
+
             self.params['gen_no'] = curr_gen
             #step 3
             Log.info('EVOLVE[%d-gen]-Begin to crossover and mutation'%(curr_gen))
@@ -146,6 +165,12 @@ class EvolveCNN(object):
         self.generate_offspring()
 
         StatusUpdateTool.end_evolution()
+
+        # DONE SIGNAL - Important information
+        Log.important('='*60)
+        Log.important('EVOLUTION COMPLETED')
+        Log.important(f'End Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
+        Log.important('='*60)
 
 
 if __name__ == '__main__':
