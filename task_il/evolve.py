@@ -18,8 +18,8 @@ from genetic.evaluate import FitnessEvaluate
 
 def run_evolve():
     params = {}
-    params['pop_size'] = 20    # Population size
-    params['max_gen'] = 3000    # Maximum number of iteration generations
+    params['pop_size'] = 10   # Population size
+    params['max_gen'] = 20    # Maximum number of iteration generations
     params['eval_mode'] = 0     # Evaluation mode: 0=pytorch_train, 1=synflow
     evoCNN = EvolveCNN(params)
     evoCNN.do_work(params)
