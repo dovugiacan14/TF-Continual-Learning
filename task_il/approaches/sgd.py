@@ -11,7 +11,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from evo_utils import Log
 
 class Appr(object):
-
     def __init__(self,model,nepochs=20,sbatch=128,lr=0.01,clipgrad=10):
         self.model=model
 
@@ -27,13 +26,13 @@ class Appr(object):
 
         return
 
-
     def train(self,t,xtrain,ytrain,xvalid,yvalid):
 
-        if t == 0:
-            epochs = self.nepochs*3
-        else:
-            epochs = self.nepochs
+        # if t == 0:
+        #     epochs = self.nepochs*3
+        # else:
+        #     epochs = self.nepochs
+        epochs = self.nepochs
 
         # Check if quiet mode is enabled
         quiet_mode = Log._quiet_mode
@@ -44,20 +43,20 @@ class Appr(object):
             clock0=time.time()
             self.train_epoch(t,xtrain,ytrain)
             clock1=time.time()
-            train_loss,train_acc=self.eval(t,xtrain,ytrain)
-            clock2=time.time()
+            # train_loss,train_acc=self.eval(t,xtrain,ytrain)  # Comment out to speed up training
+            # clock2=time.time()
 
             # Only print epoch details if NOT in quiet mode
             if not quiet_mode:
-                print('| Epoch {:3d}, time={:5.1f}ms/{:5.1f}ms | Train: loss={:.3f}, acc={:5.1f}% |'.format(e+1,
-                    1000*self.sbatch*(clock1-clock0)/xtrain.size(0),1000*self.sbatch*(clock2-clock0)/xtrain.size(0),train_loss,100*train_acc),end='')
-                # Valid
-                valid_loss,valid_acc=self.eval(t,xvalid,yvalid)
-                print(' Valid: loss={:.3f}, acc={:5.1f}% |'.format(valid_loss,100*valid_acc),end='')
-                print()
+                print('| Epoch {:3d}, time={:5.1f}ms |'.format(e+1,
+                    1000*self.sbatch*(clock1-clock0)/xtrain.size(0)))
+                # Valid evaluation removed - not needed, final metrics use TEST set
+                # valid_loss,valid_acc=self.eval(t,xvalid,yvalid)
+                # print(' Valid: loss={:.3f}, acc={:5.1f}% |'.format(valid_loss,100*valid_acc),end='')
             else:
-                # In quiet mode, still evaluate but don't print
-                valid_loss,valid_acc=self.eval(t,xvalid,yvalid)
+                # In quiet mode, skip validation eval to speed up training
+                pass
+                # valid_loss,valid_acc=self.eval(t,xvalid,yvalid)
 
         return
 
