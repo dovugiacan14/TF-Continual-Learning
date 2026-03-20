@@ -14,7 +14,6 @@ import torch.nn as nn
 from networks.arch_craft import Net
 from model_code import init_code
 import copy
-import math
 import multiprocessing  # Required for RunModel interface compatibility
 
 Inc_cls = 5    # Number of classes incremented at each step
@@ -215,31 +214,28 @@ class SynflowEvaluator(object):
         self.log_record('Calculating Synflow score...')
         synflow_score = self.calculate_synflow(net)
 
-        # Use log(synflow) as fitness metric
-        # Raw synflow explodes exponentially with depth because activations compound
-        # through the linearized network (BN is identity with fresh init, all-positive
-        # weights only grow). log() converts multiplicative path products into additive
-        # sums, making scores comparable across architectures of different depths.
-        log_synflow = math.log(synflow_score + 1e-10)
+        # Normalize by number of parameters (for fair comparison across architectures)
+        normalized_synflow = synflow_score / total_params if total_params > 0 else 0.0
 
-        self.log_record('Synflow score (raw): %.6e' % synflow_score)
-        self.log_record('Synflow score (log): %.6f' % log_synflow)
+        self.log_record('Synflow score (raw): %.6f' % synflow_score)
+        self.log_record('Synflow score (normalized per param): %.6f' % normalized_synflow)
 
         # Optional: Calculate per-layer scores for analysis
         layer_scores = self.calculate_synflow_per_layer(net)
         self.log_record('Layer-wise Synflow scores:')
         for layer_name, score in sorted(layer_scores.items(), key=lambda x: x[1], reverse=True):
-            self.log_record('  %s: %.6e' % (layer_name, score))
+            self.log_record('  %s: %.6f' % (layer_name, score))
 
-        # Use log(synflow) as fitness — higher = better gradient flow
-        fitness_score = log_synflow
+        # Use normalized synflow score as fitness metric
+        # Higher synflow = better gradient flow = potentially better architecture
+        fitness_score = normalized_synflow
 
-        self.log_record('Fitness score (log Synflow): %.3f' % fitness_score)
+        self.log_record('Fitness score (Synflow): %.3f' % fitness_score)
 
         # Store metrics
         self.metrics = {
-            'synflow_raw': synflow_score,
-            'synflow_log': round(log_synflow, 6),
+            'synflow_raw': round(synflow_score, 6),
+            'synflow_normalized': round(normalized_synflow, 6),
             'synflow_fitness': round(fitness_score, 3),
             'num_params': round(total_params / 1e6, 4)
         }
@@ -265,22 +261,22 @@ class RunModel(object):
             metrics = getattr(m, 'metrics',
                             {'synflow_fitness': fitness_score,
                              'synflow_raw': 0.0,
-                             'synflow_log': 0.0,
+                             'synflow_normalized': 0.0,
                              'num_params': 0.0})
 
-            m.log_record('Finished-Synflow:%.3f, Log:%.6f, Raw:%.6e, Params:%.4fM' %
+            m.log_record('Finished-Synflow:%.3f, Raw:%.6f, Norm:%.6f, Params:%.4fM' %
                         (metrics['synflow_fitness'],
-                         metrics['synflow_log'],
                          metrics['synflow_raw'],
+                         metrics['synflow_normalized'],
                          metrics['num_params']))
 
             f = open('./populations/after_%s.txt'%(file_id[4:6]), 'a+')
-            # Write synflow metrics in format: indiXXXX={synflow:73.074, log:..., raw:..., params:...}
-            f.write('%s={synflow:%.3f, log:%.6f, raw:%.6e, params:%.4f}\n'%
+            # Write synflow metrics in format: indiXXXX={synflow:73.074, raw:..., norm:..., params:...}
+            f.write('%s={synflow:%.3f, raw:%.6f, norm:%.6f, params:%.4f}\n'%
                    (file_id,
                     metrics['synflow_fitness'],
-                    metrics['synflow_log'],
                     metrics['synflow_raw'],
+                    metrics['synflow_normalized'],
                     metrics['num_params']))
             f.flush()
             f.close()

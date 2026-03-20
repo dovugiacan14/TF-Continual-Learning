@@ -1,6 +1,6 @@
 """
-Synflow-based Fitness Evaluation
-Uses Synaptic Flow instead of training for fast architecture evaluation
+Zen-NAS Fitness Evaluation
+Uses Zen-Score instead of training for fast architecture evaluation
 """
 from evo_utils import Utils, GPUTools, Log
 import importlib
@@ -9,10 +9,11 @@ import os
 import sys
 
 
-class SynflowEvaluate(object):
+class ZenEvaluate(object):
     """
-    Evaluate fitness using Synflow score instead of training.
-    Much faster than training-based evaluation.
+    Evaluate fitness using Zen-Score instead of training.
+    Based on Zen-NAS (ICCV 2021) - measures network expressivity
+    via output sensitivity to input perturbations + BN scaling.
     """
 
     def __init__(self, individuals, log):
@@ -20,18 +21,18 @@ class SynflowEvaluate(object):
         self.log = log
 
     def generate_to_python_file(self):
-        """Generate Python files using synflow template"""
-        self.log.info('Begin to generate synflow python files')
+        """Generate Python files using zen template"""
+        self.log.info('Begin to generate zen python files')
         for indi in self.individuals:
-            Utils.generate_synflow_file(indi)
-        self.log.info('Finish the generation of synflow python files')
+            Utils.generate_zen_file(indi)
+        self.log.info('Finish the generation of zen python files')
 
     def evaluate(self):
         """
-        Evaluate fitness using Synflow score.
+        Evaluate fitness using Zen-Score.
         Runs sequentially (no multiprocessing) for CUDA compatibility.
         """
-        self.log.info('Query synflow fitness from cache')
+        self.log.info('Query zen fitness from cache')
         _map = Utils.load_cache_data()
         _count = 0
         for indi in self.individuals:
@@ -39,23 +40,22 @@ class SynflowEvaluate(object):
             if _key in _map:
                 _count += 1
                 _score = _map[_key]
-                self.log.info('Hit the cache for %s, key:%s, synflow:%.5f, assigned_score:%.5f'%
+                self.log.info('Hit the cache for %s, key:%s, zen:%.5f, assigned_score:%.5f'%
                             (indi.id, _key, float(_score), indi.acc))
                 indi.acc = float(_score)
-        self.log.info('Total hit %d individuals for synflow fitness'%(_count))
+        self.log.info('Total hit %d individuals for zen fitness'%(_count))
 
         has_evaluated_offspring = False
         for indi in self.individuals:
             if indi.acc < 0:
                 has_evaluated_offspring = True
-                # time.sleep(2)
                 gpu_id = GPUTools.detect_available_gpu_id()
                 while gpu_id is None:
                     time.sleep(10)
                     gpu_id = GPUTools.detect_available_gpu_id()
                 if gpu_id is not None:
                     file_name = indi.id
-                    self.log.info('Begin to evaluate synflow for %s'%(file_name))
+                    self.log.info('Begin to evaluate zen for %s'%(file_name))
                     module_name = 'scripts.%s'%(file_name)
                     if module_name in sys.modules.keys():
                         self.log.info('Module:%s has been loaded, delete it'%(module_name))
@@ -67,14 +67,14 @@ class SynflowEvaluate(object):
                     cls_obj = _class()
                     # Run sequentially (no Process) for CUDA compatibility
                     cls_obj.do_work('%d' % gpu_id, file_name)
-                    self.log.info('Finished synflow evaluation for %s'%(file_name))
+                    self.log.info('Finished zen evaluation for %s'%(file_name))
             else:
                 file_name = indi.id
-                self.log.info('%s has inherited the synflow fitness as %.5f, no need to evaluate'%
+                self.log.info('%s has inherited the zen fitness as %.5f, no need to evaluate'%
                             (file_name, indi.acc))
                 f = open('./populations/after_%s.txt'%(file_name[4:6]), 'a+')
-                # Write synflow format
-                f.write('%s={synflow:%.5f, raw:0.0, norm:0.0, params:0.0}\n'%(file_name, indi.acc))
+                # Write zen format
+                f.write('%s={zen:%.5f, avg:0.0, std:0.0, params:0.0}\n'%(file_name, indi.acc))
                 f.flush()
                 f.close()
 
@@ -83,7 +83,6 @@ class SynflowEvaluate(object):
             all_finished = False
             while all_finished is not True:
                 has_nums = 0
-                # time.sleep(2)
                 file_name = './populations/after_%s.txt' % (self.individuals[0].id[4:6])
                 assert os.path.exists(file_name) is True
                 f = open(file_name, 'r')
@@ -94,29 +93,29 @@ class SynflowEvaluate(object):
                 if has_nums >= len(self.individuals):
                     all_finished = True
 
-            # Load synflow fitness from files
+            # Load zen fitness from files
             file_name = './populations/after_%s.txt'%(self.individuals[0].id[4:6])
             assert os.path.exists(file_name) is True
             f = open(file_name, 'r')
             fitness_map = {}
             for line in f:
                 if len(line.strip()) > 0:
-                    # Synflow format: indiXXXX={synflow:73.074, raw:..., norm:..., params:...}
+                    # Zen format: indiXXXX={zen:73.074, avg:..., std:..., params:...}
                     parts = line.strip().split('=')
                     indi_id = parts[0]
 
                     if '{' in parts[1]:
-                        # Parse synflow metrics dict
+                        # Parse zen metrics dict
                         metrics_str = parts[1]
                         metrics_str = metrics_str.replace('{', '').replace('}', '')
                         metrics_parts = metrics_str.split(',')
-                        # Extract synflow score
+                        # Extract zen score
                         for metric in metrics_parts:
                             key_value = metric.strip().split(':')
                             if len(key_value) == 2:
                                 key = key_value[0].strip()
                                 value = float(key_value[1].strip())
-                                if key == 'synflow':
+                                if key == 'zen':
                                     fitness_map[indi_id] = value
                                     break
             f.close()
@@ -128,7 +127,6 @@ class SynflowEvaluate(object):
                         self.log.warn('The individuals have been evaluated, but the records are not correct, '
                                     'the fitness of %s does not exist in %s, wait 120 seconds'%
                                     (indi.id, file_name))
-                        # time.sleep(2)
                     indi.acc = fitness_map[indi.id]
 
             # Save to cache
@@ -145,4 +143,4 @@ class SynflowEvaluate(object):
             f.write('\n')
             f.close()
         else:
-            self.log.info('None offspring has been evaluated with synflow')
+            self.log.info('None offspring has been evaluated with zen')

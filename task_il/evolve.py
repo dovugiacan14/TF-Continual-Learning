@@ -14,6 +14,7 @@ from genetic.mutation import Mutation
 import numpy as np
 import copy
 from genetic.evaluate_synflow import SynflowEvaluate
+from genetic.evaluate_zen import ZenEvaluate
 from genetic.evaluate import FitnessEvaluate
 
 def run_evolve():
@@ -41,8 +42,12 @@ class EvolveCNN(object):
     def fitness_evaluate(self):
         eval_mode = self.params.get('eval_mode', 0)  # Default to pytorch_train mode
 
-        if eval_mode == 1:
-            # use Synflow 
+        if eval_mode == 2:
+            # use Zen-NAS (Zen-Score)
+            fitness = ZenEvaluate(self.pops.individuals, Log)
+            Log.info('Using Zen-NAS evaluation mode (eval_mode=%d)' % eval_mode)
+        elif eval_mode == 1:
+            # use Synflow
             fitness = SynflowEvaluate(self.pops.individuals, Log)
             Log.info('Using Synflow evaluation mode (eval_mode=%d)' % eval_mode)
         else:
@@ -113,7 +118,7 @@ class EvolveCNN(object):
         max_gen = params['max_gen']
         pop_size = params['pop_size']
         eval_mode = params.get('eval_mode', 0)
-        eval_mode_str = 'Synflow' if eval_mode == 1 else 'PyTorch Train'
+        eval_mode_str = {0: 'PyTorch Train', 1: 'Synflow', 2: 'Zen-NAS'}.get(eval_mode, 'Unknown')
 
         # START SIGNAL - Important information
         Log.important('='*60)
