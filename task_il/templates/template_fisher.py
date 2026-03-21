@@ -74,15 +74,17 @@ class FisherEvaluator(object):
 
     def calculate_fisher(self, net, dataloader, n_steps=1):
         """
-        Calculate Fisher Information score adapted from pytorch-blockswap.
+        Calculate Fisher Information score (diagonal Fisher approximation).
 
-        Algorithm (from blockswap _fisher method):
+        Algorithm:
         1. Forward pass with real data minibatch
-        2. Compute cross-entropy loss
+        2. Compute cross-entropy loss across ALL task heads (stronger gradient signal)
         3. Backward pass
-        4. For each layer with parameters:
-           Fisher_k = 0.5 * mean((param * grad)^2)
-        5. Sum across all layers = architecture Fisher score
+        4. Diagonal Fisher: F = sum(grad^2) across all parameters
+        5. Repeat n_steps times and average
+
+        This is the standard empirical Fisher used in NAS literature.
+        Using grad^2 (not (param*grad)^2) to avoid numerical underflow.
 
         Args:
             net: Neural network model
@@ -114,22 +116,19 @@ class FisherEvaluator(object):
             # Forward pass - Net returns list of outputs (one per task)
             outputs = net(inputs)
 
-            # Use first task head for Fisher (task 0, classes 0-4)
-            # Remap targets to task-local labels
+            # Use ALL task heads for loss to get stronger gradient through shared backbone
             task_targets = targets % self.inc
-            loss = criterion(outputs[0], task_targets)
+            loss = sum([criterion(out, task_targets) for out in outputs]) / len(outputs)
 
             # Backward pass
             loss.backward()
 
-            # Compute Fisher information per parameter
-            # Following blockswap: F_k = 0.5 * mean((param * grad)^2)
+            # Diagonal Fisher: F = sum(grad^2) per parameter
             step_fisher = 0.0
-            for param in net.parameters():
-                if param.grad is not None:
-                    # Element-wise product of parameter and gradient, squared, mean, scaled by 0.5
-                    fisher_param = (param * param.grad).pow(2).sum().item() * 0.5
-                    step_fisher += fisher_param
+            with torch.no_grad():
+                for param in net.parameters():
+                    if param.grad is not None:
+                        step_fisher += param.grad.pow(2).sum().item()
 
             running_fisher += step_fisher
 
@@ -155,14 +154,15 @@ class FisherEvaluator(object):
         net.zero_grad()
         outputs = net(inputs)
         task_targets = targets % self.inc
-        loss = criterion(outputs[0], task_targets)
+        loss = sum([criterion(out, task_targets) for out in outputs]) / len(outputs)
         loss.backward()
 
         layer_scores = {}
-        for name, param in net.named_parameters():
-            if param.grad is not None:
-                score = (param * param.grad).pow(2).sum().item() * 0.5
-                layer_scores[name] = score
+        with torch.no_grad():
+            for name, param in net.named_parameters():
+                if param.grad is not None:
+                    score = param.grad.pow(2).sum().item()
+                    layer_scores[name] = score
 
         net.zero_grad()
         return layer_scores
@@ -199,32 +199,41 @@ class FisherEvaluator(object):
         self.log_record('Loading CIFAR-100 data for Fisher computation...')
         dataloader = self.get_dataloader(batch_size=64)
 
-        # Calculate Fisher score
+        # Calculate Fisher score (average over 3 runs for stability)
         self.log_record('Calculating Fisher score...')
-        fisher_score = self.calculate_fisher(net, dataloader, n_steps=1)
+        fisher_scores = []
+        for run in range(3):
+            dl = self.get_dataloader(batch_size=64)
+            score = self.calculate_fisher(net, dl, n_steps=1)
+            fisher_scores.append(score)
+            self.log_record('Fisher run %d: %.6f' % (run, score))
 
-        # Normalize by number of parameters (for fair comparison across architectures)
-        normalized_fisher = fisher_score / total_params if total_params > 0 else 0.0
+        fisher_score = np.mean(fisher_scores)
+        fisher_std = np.std(fisher_scores)
 
-        self.log_record('Fisher score (raw): %.6f' % fisher_score)
-        self.log_record('Fisher score (normalized per param): %.6f' % normalized_fisher)
+        # Use log(1 + score) for fitness: maps large raw values to manageable scale
+        # while preserving ranking order between architectures
+        fitness_score = float(np.log1p(fisher_score))
+
+        self.log_record('Fisher score (raw mean): %.6f' % fisher_score)
+        self.log_record('Fisher score (raw std): %.6f' % fisher_std)
+        self.log_record('Fitness score (log1p): %.6f' % fitness_score)
 
         # Optional: Calculate per-layer scores for analysis
         dataloader2 = self.get_dataloader(batch_size=64)
         layer_scores = self.calculate_fisher_per_layer(net, dataloader2)
-        self.log_record('Layer-wise Fisher scores:')
-        for layer_name, score in sorted(layer_scores.items(), key=lambda x: x[1], reverse=True):
+        self.log_record('Layer-wise Fisher scores (top 10):')
+        for i, (layer_name, score) in enumerate(sorted(layer_scores.items(), key=lambda x: x[1], reverse=True)):
+            if i >= 10:
+                break
             self.log_record('  %s: %.6f' % (layer_name, score))
-
-        # Use normalized Fisher score as fitness metric
-        fitness_score = normalized_fisher
 
         self.log_record('Fitness score (Fisher): %.3f' % fitness_score)
 
         # Store metrics
         self.metrics = {
             'fisher_raw': round(fisher_score, 6),
-            'fisher_normalized': round(normalized_fisher, 6),
+            'fisher_std': round(fisher_std, 6),
             'fisher_fitness': round(fitness_score, 3),
             'num_params': round(total_params / 1e6, 4)
         }
@@ -250,22 +259,22 @@ class RunModel(object):
             metrics = getattr(m, 'metrics',
                             {'fisher_fitness': fitness_score,
                              'fisher_raw': 0.0,
-                             'fisher_normalized': 0.0,
+                             'fisher_std': 0.0,
                              'num_params': 0.0})
 
-            m.log_record('Finished-Fisher:%.3f, Raw:%.6f, Norm:%.6f, Params:%.4fM' %
+            m.log_record('Finished-Fisher:%.3f, Raw:%.6f, Std:%.6f, Params:%.4fM' %
                         (metrics['fisher_fitness'],
                          metrics['fisher_raw'],
-                         metrics['fisher_normalized'],
+                         metrics['fisher_std'],
                          metrics['num_params']))
 
             f = open('./populations/after_%s.txt'%(file_id[4:6]), 'a+')
-            # Write fisher metrics in format: indiXXXX={fisher:73.074, raw:..., norm:..., params:...}
-            f.write('%s={fisher:%.3f, raw:%.6f, norm:%.6f, params:%.4f}\n'%
+            # Write fisher metrics in format: indiXXXX={fisher:73.074, raw:..., std:..., params:...}
+            f.write('%s={fisher:%.3f, raw:%.6f, std:%.6f, params:%.4f}\n'%
                    (file_id,
                     metrics['fisher_fitness'],
                     metrics['fisher_raw'],
-                    metrics['fisher_normalized'],
+                    metrics['fisher_std'],
                     metrics['num_params']))
             f.flush()
             f.close()
