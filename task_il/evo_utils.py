@@ -366,7 +366,7 @@ class Utils(object):
     @classmethod
     def read_template(cls):
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        _path = os.path.join(script_dir, 'template.py')
+        _path = os.path.join(script_dir, 'templates', 'template.py')
         part1 = []
         part2 = []
 
@@ -389,7 +389,7 @@ class Utils(object):
     def read_synflow_template(cls):
         """Read template_synflow.py for Synflow-based evaluation"""
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        _path = os.path.join(script_dir, 'template_synflow.py')
+        _path = os.path.join(script_dir, 'templates', 'template_synflow.py')
         part1 = []
         part2 = []
 
@@ -468,7 +468,7 @@ class Utils(object):
     def read_zen_template(cls):
         """Read template_zen.py for Zen-NAS evaluation"""
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        _path = os.path.join(script_dir, 'template_zen.py')
+        _path = os.path.join(script_dir, 'templates', 'template_zen.py')
         part1 = []
         part2 = []
 
