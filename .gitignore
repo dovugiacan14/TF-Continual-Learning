@@ -8,3 +8,8 @@ main.log
 dat/
 task_il/data/
 results/
+
+# Reference codebases (not part of this project)
+ZenNAS/
+nas-without-training/
+pytorch-blockswap/
