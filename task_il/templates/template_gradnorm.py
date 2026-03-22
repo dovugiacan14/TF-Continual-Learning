@@ -107,17 +107,17 @@ class GradNormEvaluator(object):
             # Step 3: Forward pass - Net returns list of outputs (one per task)
             outputs = net(input_data)
 
-            # Use first task head for gradient computation
-            output = outputs[0]
-            num_classes = output.shape[1]
-
-            # Step 4: Random labels -> one-hot
-            y = torch.randint(low=0, high=num_classes, size=[batch_size])
-            one_hot_y = F.one_hot(y, num_classes).float().cuda()
-
-            # Step 5: Cross-entropy loss (manual, matching ZenNAS implementation)
-            prob_logit = F.log_softmax(output, dim=1)
-            loss = -(one_hot_y * prob_logit).sum(dim=1).mean()
+            # Step 4: Compute loss across ALL task heads for stronger gradient signal
+            # Each head has Inc_cls outputs; use random labels per head
+            total_loss = 0.0
+            for output in outputs:
+                num_classes = output.shape[1]
+                y = torch.randint(low=0, high=num_classes, size=[batch_size])
+                one_hot_y = F.one_hot(y, num_classes).float().cuda()
+                # Cross-entropy loss (manual, matching ZenNAS implementation)
+                prob_logit = F.log_softmax(output, dim=1)
+                total_loss += -(one_hot_y * prob_logit).sum(dim=1).mean()
+            loss = total_loss / len(outputs)
 
             # Step 6: Backward pass
             loss.backward()
@@ -156,20 +156,17 @@ class GradNormEvaluator(object):
         total_params = sum([param.nelement() for param in net.parameters()])
         self.log_record('Number of parameters: %.4fM' % (total_params / 1e6))
 
-        # Calculate GradNorm score (with 3 repeats for stability)
+        # Calculate GradNorm score (with repeat for stability)
         self.log_record('Calculating GradNorm score...')
         avg_gradnorm, std_gradnorm = self.calculate_gradnorm(net, batch_size=64, repeat=3)
 
-        # Normalize by number of parameters (for fair comparison across architectures)
-        normalized_gradnorm = avg_gradnorm / total_params if total_params > 0 else 0.0
-
         self.log_record('GradNorm score (avg): %.6f' % avg_gradnorm)
         self.log_record('GradNorm score (std): %.6f' % std_gradnorm)
-        self.log_record('GradNorm score (normalized per param): %.6f' % normalized_gradnorm)
+        self.log_record('Num parameters: %.4fM' % (total_params / 1e6))
 
-        # Use normalized GradNorm score as fitness metric
+        # Use raw GradNorm as fitness (same as ZenNAS original - no normalization)
         # Higher gradient norm = better gradient flow = potentially better architecture
-        fitness_score = normalized_gradnorm
+        fitness_score = avg_gradnorm
 
         self.log_record('Fitness score (GradNorm): %.3f' % fitness_score)
 
