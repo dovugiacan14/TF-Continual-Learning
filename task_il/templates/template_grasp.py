@@ -81,7 +81,7 @@ class GraSPEvaluator(object):
         Phase 1: Compute first-order gradients (grad_w) on two data splits
         Phase 2: Compute Hessian-gradient product via z = sum(grad_w * grad_f)
         Score:   sum( -theta * Hg ) across all Conv2d and Linear layers (algebraic sum)
-        Uses single task head (outputs[0]) to match original GraSP single-output design.
+        Uses all 20 task heads for continual learning (all heads in computation graph).
 
         Args:
             net: Neural network model
@@ -128,10 +128,10 @@ class GraSPEvaluator(object):
             inputs = inputs.cuda()
             targets = targets.cuda()
 
-            # First half — use single head (outputs[0]) like original GraSP
+            # First half — all 20 task heads (all weights in computation graph)
             outputs = net(inputs[:N//2])
             task_targets = targets[:N//2] % self.inc
-            loss = F.cross_entropy(outputs[0] / T, task_targets)
+            loss = sum([F.cross_entropy(out / T, task_targets) for out in outputs])
             grad_w_p = autograd.grad(loss, weights)
             if grad_w is None:
                 grad_w = list(grad_w_p)
@@ -139,10 +139,10 @@ class GraSPEvaluator(object):
                 for idx in range(len(grad_w)):
                     grad_w[idx] += grad_w_p[idx]
 
-            # Second half — use single head (outputs[0]) like original GraSP
+            # Second half — all 20 task heads
             outputs = net(inputs[N//2:])
             task_targets = targets[N//2:] % self.inc
-            loss = F.cross_entropy(outputs[0] / T, task_targets)
+            loss = sum([F.cross_entropy(out / T, task_targets) for out in outputs])
             grad_w_p = autograd.grad(loss, weights, create_graph=False)
             if grad_w is None:
                 grad_w = list(grad_w_p)
@@ -157,7 +157,7 @@ class GraSPEvaluator(object):
 
             outputs = net(inputs)
             task_targets = targets % self.inc
-            loss = F.cross_entropy(outputs[0] / T, task_targets)
+            loss = sum([F.cross_entropy(out / T, task_targets) for out in outputs])
 
             grad_f = autograd.grad(loss, weights, create_graph=True)
             z = 0
