@@ -689,6 +689,62 @@ class Utils(object):
         Log.info('Generated gradnorm file: %s' % file_name)
 
     @classmethod
+    def read_grasp_template(cls):
+        """Read template_grasp.py for GraSP-based evaluation"""
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        _path = os.path.join(script_dir, 'templates', 'template_grasp.py')
+        part1 = []
+        part2 = []
+
+        with open(_path, 'r') as f:
+            lines = f.readlines()
+
+        # Skip first docstring
+        i = 0
+        if lines[i].strip() == '"""':
+            i += 1
+            while i < len(lines) and lines[i].strip() != '"""':
+                i += 1
+            i += 1  # Skip closing """
+
+        # Read until #generated_code
+        while i < len(lines) and lines[i].strip() != '#generated_code':
+            part1.append(lines[i].rstrip())
+            i += 1
+
+        i += 1  # Skip #generated_code line
+
+        # Read all remaining lines
+        while i < len(lines):
+            part2.append(lines[i].rstrip())
+            i += 1
+
+        return part1, part2
+
+    @classmethod
+    def generate_grasp_file(cls, indi):
+        """Generate Python file using GraSP template for fast evaluation"""
+        code = indi.code
+
+        part1, part2 = cls.read_grasp_template()
+        _str = []
+        current_time = time.strftime("%Y-%m-%d  %H:%M:%S")
+        _str.append('"""')
+        _str.append(current_time)
+        _str.append('"""')
+        _str.extend(part1)
+        _str.append('\ncode = %s' % str(code))
+        _str.extend(part2)
+
+        file_name = './scripts/%s.py' % (indi.id)
+        os.makedirs('./scripts', exist_ok=True)
+        script_file_handler = open(file_name, 'w')
+        script_file_handler.write('\n'.join(_str))
+        script_file_handler.flush()
+        script_file_handler.close()
+        Log.info('Generated grasp file: %s' % file_name)
+
+    @classmethod
     def write_to_file(cls, _str, _file):
         f = open(_file, 'w')
         f.write(_str)
