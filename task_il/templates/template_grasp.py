@@ -82,10 +82,6 @@ class GraSPEvaluator(object):
         Phase 2: Compute Hessian-gradient product via z = sum(grad_w * grad_f)
         Score:   sum(| -theta * Hg |) across all Conv2d and Linear layers
 
-        Unlike original GraSP (which returns pruning masks), this returns
-        a scalar score representing the total gradient signal preservation
-        capacity of the architecture.
-
         Args:
             net: Neural network model
             dataloader: DataLoader with real training data
@@ -134,7 +130,7 @@ class GraSPEvaluator(object):
             # First half
             outputs = net(inputs[:N//2])
             task_targets = targets[:N//2] % self.inc
-            loss = sum([F.cross_entropy(out / T, task_targets) for out in outputs]) / len(outputs)
+            loss = sum([F.cross_entropy(out / T, task_targets) for out in outputs])
             grad_w_p = autograd.grad(loss, weights)
             if grad_w is None:
                 grad_w = list(grad_w_p)
@@ -145,7 +141,7 @@ class GraSPEvaluator(object):
             # Second half
             outputs = net(inputs[N//2:])
             task_targets = targets[N//2:] % self.inc
-            loss = sum([F.cross_entropy(out / T, task_targets) for out in outputs]) / len(outputs)
+            loss = sum([F.cross_entropy(out / T, task_targets) for out in outputs])
             grad_w_p = autograd.grad(loss, weights, create_graph=False)
             if grad_w is None:
                 grad_w = list(grad_w_p)
@@ -160,7 +156,7 @@ class GraSPEvaluator(object):
 
             outputs = net(inputs)
             task_targets = targets % self.inc
-            loss = sum([F.cross_entropy(out / T, task_targets) for out in outputs]) / len(outputs)
+            loss = sum([F.cross_entropy(out / T, task_targets) for out in outputs])
 
             grad_f = autograd.grad(loss, weights, create_graph=True)
             z = 0
@@ -222,9 +218,9 @@ class GraSPEvaluator(object):
         # Calculate GraSP score (average over 3 runs for stability)
         self.log_record('Calculating GraSP score...')
         grasp_scores = []
-        for run in range(3):
+        for run in range(5):
             net.apply(init_weights)
-            dl = self.get_dataloader(batch_size=128)
+            dl = self.get_dataloader(batch_size=256)
             score = self.calculate_grasp(net, dl, T=200, num_iters=1)
             grasp_scores.append(score)
             self.log_record('GraSP run %d: %.6f' % (run, score))
