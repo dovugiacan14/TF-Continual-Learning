@@ -47,7 +47,7 @@ class GraSPEvaluate(object):
 
         has_evaluated_offspring = False
         for indi in self.individuals:
-            if indi.acc < 0:
+            if indi.acc == -1:  # Use == -1 (not < 0) because GraSP scores can be negative
                 has_evaluated_offspring = True
                 gpu_id = GPUTools.detect_available_gpu_id()
                 while gpu_id is None:
@@ -133,7 +133,7 @@ class GraSPEvaluate(object):
             f = open('./populations/history.txt', 'a+')
             _str = []
             for ind in self.individuals:
-                if ind.acc > 0.0:
+                if ind.acc != -1:
                     _str.append(str(ind))
                     _str.append('-' * 100)
             f.write('\n'.join(_str))

@@ -3,7 +3,7 @@ GraSP-based Template for Neural Architecture Evaluation
 Uses Gradient Signal Preservation to estimate network quality without training.
 
 Adapted from GraSP/pruner/GraSP.py (Wang et al., ICLR 2020).
-GraSP score = sum(| -theta * Hg |) where Hg is the Hessian-gradient product.
+GraSP score = sum( -theta * Hg ) where Hg is the Hessian-gradient product (algebraic sum).
 
 Note: This version runs sequentially without multiprocessing (CUDA compatible)
 """
@@ -80,7 +80,8 @@ class GraSPEvaluator(object):
         Algorithm:
         Phase 1: Compute first-order gradients (grad_w) on two data splits
         Phase 2: Compute Hessian-gradient product via z = sum(grad_w * grad_f)
-        Score:   sum(| -theta * Hg |) across all Conv2d and Linear layers
+        Score:   sum( -theta * Hg ) across all Conv2d and Linear layers (algebraic sum)
+        Uses single task head (outputs[0]) to match original GraSP single-output design.
 
         Args:
             net: Neural network model
@@ -127,10 +128,10 @@ class GraSPEvaluator(object):
             inputs = inputs.cuda()
             targets = targets.cuda()
 
-            # First half
+            # First half — use single head (outputs[0]) like original GraSP
             outputs = net(inputs[:N//2])
             task_targets = targets[:N//2] % self.inc
-            loss = sum([F.cross_entropy(out / T, task_targets) for out in outputs])
+            loss = F.cross_entropy(outputs[0] / T, task_targets)
             grad_w_p = autograd.grad(loss, weights)
             if grad_w is None:
                 grad_w = list(grad_w_p)
@@ -138,10 +139,10 @@ class GraSPEvaluator(object):
                 for idx in range(len(grad_w)):
                     grad_w[idx] += grad_w_p[idx]
 
-            # Second half
+            # Second half — use single head (outputs[0]) like original GraSP
             outputs = net(inputs[N//2:])
             task_targets = targets[N//2:] % self.inc
-            loss = sum([F.cross_entropy(out / T, task_targets) for out in outputs])
+            loss = F.cross_entropy(outputs[0] / T, task_targets)
             grad_w_p = autograd.grad(loss, weights, create_graph=False)
             if grad_w is None:
                 grad_w = list(grad_w_p)
@@ -156,7 +157,7 @@ class GraSPEvaluator(object):
 
             outputs = net(inputs)
             task_targets = targets % self.inc
-            loss = sum([F.cross_entropy(out / T, task_targets) for out in outputs])
+            loss = F.cross_entropy(outputs[0] / T, task_targets)
 
             grad_f = autograd.grad(loss, weights, create_graph=True)
             z = 0
@@ -174,9 +175,10 @@ class GraSPEvaluator(object):
                 score = -layer.weight.data * layer.weight.grad
                 grasp_scores.append(score)
 
-        # Total score = sum of absolute GraSP scores across all layers
+        # Algebraic sum: positive = gradient preserving, negative = gradient destroying
+        # Using sum(scores) NOT sum(|scores|) to preserve directional information
         all_scores = torch.cat([torch.flatten(s) for s in grasp_scores])
-        grasp_score = float(torch.sum(torch.abs(all_scores)).item())
+        grasp_score = float(torch.sum(all_scores).item())
 
         # Clean up
         del net
@@ -228,9 +230,10 @@ class GraSPEvaluator(object):
         grasp_score = np.mean(grasp_scores)
         grasp_std = np.std(grasp_scores)
 
-        # Use log(1 + score) for fitness: maps large raw values to manageable scale
-        # while preserving ranking order between architectures
-        fitness_score = float(np.log1p(grasp_score))
+        # Use raw algebraic sum as fitness score directly
+        # Positive = good gradient preservation, negative = poor preservation
+        # Higher score = better architecture for training
+        fitness_score = grasp_score
 
         self.log_record('GraSP score (raw mean): %.6f' % grasp_score)
         self.log_record('GraSP score (raw std): %.6f' % grasp_std)
