@@ -221,14 +221,15 @@ class GraSPEvaluator(object):
         grasp_score = np.mean(grasp_scores)
         grasp_std = np.std(grasp_scores)
 
-        # Use raw algebraic sum as fitness score directly
-        # Positive = good gradient preservation, negative = poor preservation
-        # Higher score = better architecture for training
-        fitness_score = grasp_score
+        # GraSP has NEGATIVE correlation with accuracy (confirmed by zero-cost-nas authors)
+        # See grasp.py line 81: "accuracy seems to be negatively correlated with this metric"
+        # More negative raw score → better architecture
+        # Negate so that EA (which maximizes fitness) selects correctly
+        fitness_score = -grasp_score
 
         self.log_record('GraSP score (raw mean): %.6f' % grasp_score)
         self.log_record('GraSP score (raw std): %.6f' % grasp_std)
-        self.log_record('Fitness score (log1p): %.6f' % fitness_score)
+        self.log_record('Fitness score (negated for EA): %.6f' % fitness_score)
         self.log_record('Num parameters: %.4fM' % (total_params / 1e6))
 
         # Store metrics

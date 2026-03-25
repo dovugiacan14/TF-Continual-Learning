@@ -74,7 +74,7 @@ class SynflowEvaluate(object):
                             (file_name, indi.acc))
                 f = open('./populations/after_%s.txt'%(file_name[4:6]), 'a+')
                 # Write synflow format
-                f.write('%s={synflow:%.5f, raw:0.0, norm:0.0, params:0.0}\n'%(file_name, indi.acc))
+                f.write('%s={synflow:%.5f, raw:0.0, params:0.0}\n'%(file_name, indi.acc))
                 f.flush()
                 f.close()
 
