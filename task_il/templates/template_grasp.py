@@ -2,8 +2,9 @@
 GraSP-based Template for Neural Architecture Evaluation
 Uses Gradient Signal Preservation to estimate network quality without training.
 
-Adapted from GraSP/pruner/GraSP.py (Wang et al., ICLR 2020).
-GraSP score = sum( -theta * Hg ) where Hg is the Hessian-gradient product (algebraic sum).
+Aligned with zero-cost-nas/foresight/pruners/measures/grasp.py (Samsung, 2021).
+Core formula: score = sum( -theta * Hg ) where Hg is the Hessian-gradient product.
+Uses T=1 (not T=200) for numerical stability — see zero-cost-nas reference implementation.
 
 Note: This version runs sequentially without multiprocessing (CUDA compatible)
 """
@@ -73,110 +74,98 @@ class GraSPEvaluator(object):
 
         return dataloader
 
-    def calculate_grasp(self, net, dataloader, T=200, num_iters=1):
+    def calculate_grasp(self, net, dataloader, T=1, num_iters=1):
         """
-        Calculate GraSP score adapted from GraSP/pruner/GraSP.py.
+        Calculate GraSP score aligned with zero-cost-nas reference implementation.
 
-        Algorithm:
-        Phase 1: Compute first-order gradients (grad_w) on two data splits
-        Phase 2: Compute Hessian-gradient product via z = sum(grad_w * grad_f)
-        Score:   sum( -theta * Hg ) across all Conv2d and Linear layers (algebraic sum)
-        Uses all 20 task heads for continual learning (all heads in computation graph).
+        Reference: zero-cost-nas/foresight/pruners/measures/grasp.py
+
+        Algorithm (same as zero-cost-nas):
+        Phase 1: Forward pass → compute first-order gradients (grad_w)
+        Phase 2: Forward pass → compute grad_f with create_graph=True
+                 → z = sum(grad_w * grad_f) → z.backward() for Hessian-vector product
+        Score:   sum( -theta * Hg ) across all Conv2d and Linear layers
+
+        Key differences from original GraSP paper (aligned with zero-cost-nas):
+        - T=1 instead of T=200 for numerical stability
+        - No data splitting (uses same batch for both phases)
+        - allow_unused=True to handle layers without gradients
+
+        Multi-head adaptation for continual learning:
+        - Loss = sum of cross-entropy over all 20 task heads
 
         Args:
             net: Neural network model
             dataloader: DataLoader with real training data
-            T: Temperature for softmax scaling (default=200, from original paper)
-            num_iters: Number of iterations (default=1 for speed)
+            T: Temperature for softmax scaling (default=1, from zero-cost-nas)
+            num_iters: Number of iterations (default=1)
 
         Returns:
-            grasp_score: Scalar GraSP score
+            grasp_score: Scalar GraSP score (higher = better gradient preservation)
         """
         net = copy.deepcopy(net)
-        net.zero_grad()
 
-        # Collect weights from Conv2d and Linear layers
+        # Collect weights from Conv2d and Linear layers (same as zero-cost-nas)
         weights = []
         for layer in net.modules():
-            if isinstance(layer, (nn.Conv2d, nn.Linear)):
+            if isinstance(layer, nn.Conv2d) or isinstance(layer, nn.Linear):
                 weights.append(layer.weight)
+                layer.weight.requires_grad_(True)
 
-        for w in weights:
-            w.requires_grad_(True)
-
-        # Phase 1: Compute first-order gradients on two data splits
-        grad_w = None
-        inputs_one = []
-        targets_one = []
-
+        # Get one batch of data
         data_iter = iter(dataloader)
-        for it in range(num_iters):
-            try:
-                inputs, targets = next(data_iter)
-            except StopIteration:
-                data_iter = iter(dataloader)
-                inputs, targets = next(data_iter)
+        try:
+            inputs, targets = next(data_iter)
+        except StopIteration:
+            data_iter = iter(dataloader)
+            inputs, targets = next(data_iter)
 
-            N = inputs.shape[0]
-            din = copy.deepcopy(inputs)
-            dtarget = copy.deepcopy(targets)
-            inputs_one.append(din[:N//2])
-            targets_one.append(dtarget[:N//2])
-            inputs_one.append(din[N//2:])
-            targets_one.append(dtarget[N//2:])
+        inputs = inputs.cuda()
+        targets = targets.cuda()
+        N = inputs.shape[0]
 
-            inputs = inputs.cuda()
-            targets = targets.cuda()
-
-            # First half — all 20 task heads (all weights in computation graph)
-            outputs = net(inputs[:N//2])
-            task_targets = targets[:N//2] % self.inc
-            loss = sum([F.cross_entropy(out / T, task_targets) for out in outputs])
-            grad_w_p = autograd.grad(loss, weights)
-            if grad_w is None:
-                grad_w = list(grad_w_p)
-            else:
-                for idx in range(len(grad_w)):
-                    grad_w[idx] += grad_w_p[idx]
-
-            # Second half — all 20 task heads
-            outputs = net(inputs[N//2:])
-            task_targets = targets[N//2:] % self.inc
-            loss = sum([F.cross_entropy(out / T, task_targets) for out in outputs])
-            grad_w_p = autograd.grad(loss, weights, create_graph=False)
-            if grad_w is None:
-                grad_w = list(grad_w_p)
-            else:
-                for idx in range(len(grad_w)):
-                    grad_w[idx] += grad_w_p[idx]
-
-        # Phase 2: Compute Hessian-gradient product
-        for it in range(len(inputs_one)):
-            inputs = inputs_one.pop(0).cuda()
-            targets = targets_one.pop(0).cuda()
-
+        # Phase 1: Compute first-order gradients (grad_w)
+        # Aligned with zero-cost-nas: no data splitting, use full batch
+        net.zero_grad()
+        grad_w = None
+        for _ in range(num_iters):
             outputs = net(inputs)
             task_targets = targets % self.inc
             loss = sum([F.cross_entropy(out / T, task_targets) for out in outputs])
+            grad_w_p = autograd.grad(loss, weights, allow_unused=True)
+            if grad_w is None:
+                grad_w = list(grad_w_p)
+            else:
+                for idx in range(len(grad_w)):
+                    if grad_w[idx] is not None and grad_w_p[idx] is not None:
+                        grad_w[idx] += grad_w_p[idx]
 
-            grad_f = autograd.grad(loss, weights, create_graph=True)
-            z = 0
-            count = 0
-            for layer in net.modules():
-                if isinstance(layer, (nn.Conv2d, nn.Linear)):
+        # Phase 2: Compute Hessian-gradient product
+        # Forward pass with create_graph=True, then z.backward()
+        outputs = net(inputs)
+        task_targets = targets % self.inc
+        loss = sum([F.cross_entropy(out / T, task_targets) for out in outputs])
+        grad_f = autograd.grad(loss, weights, create_graph=True, allow_unused=True)
+
+        # z = sum(grad_w * grad_f) — the Pearlmutter trick for Hessian-vector product
+        z, count = 0, 0
+        for layer in net.modules():
+            if isinstance(layer, nn.Conv2d) or isinstance(layer, nn.Linear):
+                if grad_w[count] is not None and grad_f[count] is not None:
                     z += (grad_w[count].data * grad_f[count]).sum()
-                    count += 1
-            z.backward()
+                count += 1
+        z.backward()
 
-        # Compute GraSP scores: -theta * Hg
+        # Compute GraSP scores: -theta * Hg (same formula as zero-cost-nas)
         grasp_scores = []
         for layer in net.modules():
-            if isinstance(layer, (nn.Conv2d, nn.Linear)):
-                score = -layer.weight.data * layer.weight.grad
-                grasp_scores.append(score)
+            if isinstance(layer, nn.Conv2d) or isinstance(layer, nn.Linear):
+                if layer.weight.grad is not None:
+                    grasp_scores.append(-layer.weight.data * layer.weight.grad)
+                else:
+                    grasp_scores.append(torch.zeros_like(layer.weight))
 
-        # Algebraic sum: positive = gradient preserving, negative = gradient destroying
-        # Using sum(scores) NOT sum(|scores|) to preserve directional information
+        # Sum all per-weight scores into a single scalar (same as zero-cost-nas find_measures)
         all_scores = torch.cat([torch.flatten(s) for s in grasp_scores])
         grasp_score = float(torch.sum(all_scores).item())
 
@@ -218,12 +207,14 @@ class GraSPEvaluator(object):
         self.log_record('Loading CIFAR-100 data for GraSP computation...')
 
         # Calculate GraSP score (average over 3 runs for stability)
-        self.log_record('Calculating GraSP score...')
+        # T=1 aligned with zero-cost-nas, batch_size=64 to avoid CUDA OOM
+        self.log_record('Calculating GraSP score (T=1, aligned with zero-cost-nas)...')
+        num_runs = 3
         grasp_scores = []
-        for run in range(5):
+        for run in range(num_runs):
             net.apply(init_weights)
-            dl = self.get_dataloader(batch_size=256)
-            score = self.calculate_grasp(net, dl, T=200, num_iters=1)
+            dl = self.get_dataloader(batch_size=64)
+            score = self.calculate_grasp(net, dl, T=1, num_iters=1)
             grasp_scores.append(score)
             self.log_record('GraSP run %d: %.6f' % (run, score))
 
@@ -252,6 +243,7 @@ class GraSPEvaluator(object):
 
 class RunModel(object):
     def do_work(self, gpu_id, file_id):
+        import traceback
         os.environ['CUDA_VISIBLE_DEVICES'] = gpu_id
         fitness_score = 0.0
         m = GraSPEvaluator()
@@ -261,8 +253,9 @@ class RunModel(object):
             fitness_score = m.process(s=0)
 
         except BaseException as e:
-            print('Exception occurs, file:%s, pid:%d...%s'%(file_id, os.getpid(), str(e)))
-            m.log_record('Exception occur:%s'%(str(e)))
+            err_msg = traceback.format_exc()
+            print('Exception occurs, file:%s, pid:%d\n%s'%(file_id, os.getpid(), err_msg))
+            m.log_record('Exception occur:%s\n%s'%(str(e), err_msg))
 
         finally:
             metrics = getattr(m, 'metrics',
