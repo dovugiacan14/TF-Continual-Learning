@@ -28,11 +28,10 @@ class Appr(object):
 
     def train(self,t,xtrain,ytrain,xvalid,yvalid):
 
-        # if t == 0:
-        #     epochs = self.nepochs*3
-        # else:
-        #     epochs = self.nepochs
-        epochs = self.nepochs
+        if t == 0:
+            epochs = self.nepochs * 3
+        else:
+            epochs = self.nepochs
 
         # Check if quiet mode is enabled
         quiet_mode = Log._quiet_mode
