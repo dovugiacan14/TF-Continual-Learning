@@ -2,8 +2,9 @@
 Fisher Information-based Template for Neural Architecture Evaluation
 Uses Fisher Information to estimate network quality without training.
 
-Adapted from pytorch-blockswap Fisher implementation.
-Fisher score = sum of 0.5 * mean((activation * gradient)^2) across all layers.
+Adapted from zero-cost-nas (Samsung) Fisher implementation.
+Fisher score = sum of 0.5 * mean((activation * gradient)^2) across all Conv2d/Linear layers.
+Uses backward hooks on dummy Identity ops to capture activation-gradient products.
 
 Note: This version runs sequentially without multiprocessing (CUDA compatible)
 """
@@ -18,6 +19,7 @@ import torch.nn.functional as F
 from networks.arch_craft import Net
 from model_code import init_code
 import copy
+import types
 import multiprocessing  # Required for RunModel interface compatibility
 import torchvision
 import torchvision.transforms as transforms
@@ -72,33 +74,94 @@ class FisherEvaluator(object):
 
         return dataloader
 
-    def calculate_fisher(self, net, dataloader, n_steps=1):
+    def _install_fisher_hooks(self, net):
         """
-        Calculate Fisher Information score (diagonal Fisher approximation).
+        Install activation-gradient hooks on Conv2d/Linear layers.
+        Adapted from zero-cost-nas (Samsung) Fisher implementation.
 
-        Algorithm:
-        1. Forward pass with real data minibatch
-        2. Compute cross-entropy loss across ALL task heads (stronger gradient signal)
-        3. Backward pass
-        4. Diagonal Fisher: F = sum(grad^2) across all parameters
-        5. Repeat n_steps times and average
-
-        This is the standard empirical Fisher used in NAS literature.
-        Using grad^2 (not (param*grad)^2) to avoid numerical underflow.
-
-        Args:
-            net: Neural network model
-            dataloader: DataLoader with real training data
-            n_steps: Number of minibatches to accumulate (default=1 for one-shot)
-
-        Returns:
-            fisher_score: Scalar Fisher information score
+        For each Conv2d/Linear layer:
+        1. Replace forward to capture activations via a dummy Identity op
+        2. Register backward hook on Identity to compute act*grad product
+        3. Accumulate Fisher: F_layer = 0.5 * mean_batch((act*grad)^2)
         """
+        def fisher_forward_conv2d(self, x):
+            x = F.conv2d(x, self.weight, self.bias, self.stride,
+                         self.padding, self.dilation, self.groups)
+            self.act = self.dummy(x)
+            return self.act
+
+        def fisher_forward_linear(self, x):
+            x = F.linear(x, self.weight, self.bias)
+            self.act = self.dummy(x)
+            return self.act
+
+        hooked_layers = []
+        for name, layer in net.named_modules():
+            if isinstance(layer, (nn.Conv2d, nn.Linear)):
+                layer.fisher = None
+                layer.act = 0.
+                layer.dummy = nn.Identity()
+                layer._fisher_name = name
+
+                if isinstance(layer, nn.Conv2d):
+                    layer.forward = types.MethodType(fisher_forward_conv2d, layer)
+                else:
+                    layer.forward = types.MethodType(fisher_forward_linear, layer)
+
+                def hook_factory(layer):
+                    def hook(module, grad_input, grad_output):
+                        act = layer.act.detach()
+                        grad = grad_output[0].detach()
+                        # Sum over spatial dims for Conv2d (4D), keep as-is for Linear (2D)
+                        if len(act.shape) > 2:
+                            g_nk = torch.sum((act * grad), list(range(2, len(act.shape))))
+                        else:
+                            g_nk = act * grad
+                        # Fisher per channel: 0.5 * mean_batch(g_nk^2)
+                        del_k = g_nk.pow(2).mean(0).mul(0.5)
+                        if layer.fisher is None:
+                            layer.fisher = del_k
+                        else:
+                            layer.fisher += del_k
+                        del layer.act  # Prevent memory leak
+                    return hook
+
+                layer.dummy.register_backward_hook(hook_factory(layer))
+                hooked_layers.append(layer)
+
+        return hooked_layers
+
+    def _run_fisher_forward_backward(self, net, dataloader):
+        """Run a single forward+backward pass (hooks will accumulate Fisher)."""
         net.train()
         criterion = nn.CrossEntropyLoss()
 
-        # Accumulate Fisher over n_steps minibatches
-        running_fisher = 0.0
+        inputs, targets = next(iter(dataloader))
+        inputs, targets = inputs.cuda(), targets.cuda()
+
+        net.zero_grad()
+        outputs = net(inputs)
+
+        task_targets = targets % self.inc
+        loss = sum([criterion(out, task_targets) for out in outputs]) / len(outputs)
+        loss.backward()
+
+    def _calculate_fisher_with_hooks(self, net, dataloader, hooked_layers, n_steps=1):
+        """
+        Calculate Fisher score using pre-installed activation-gradient hooks.
+
+        Algorithm (adapted from zero-cost-nas Samsung implementation):
+        1. Forward pass with real data minibatch
+        2. Compute cross-entropy loss across ALL task heads
+        3. Backward pass triggers hooks: F_layer = 0.5 * mean_batch((act*grad)^2)
+        4. Sum Fisher across all channels of all layers
+
+        This uses (activation * gradient)^2 instead of just grad^2,
+        which better captures per-channel sensitivity and aligns with
+        the zero-cost-nas pruning literature.
+        """
+        net.train()
+        criterion = nn.CrossEntropyLoss()
 
         data_iter = iter(dataloader)
         for step in range(n_steps):
@@ -110,62 +173,22 @@ class FisherEvaluator(object):
 
             inputs, targets = inputs.cuda(), targets.cuda()
 
-            # Clear gradients
             net.zero_grad()
-
-            # Forward pass - Net returns list of outputs (one per task)
             outputs = net(inputs)
 
-            # Use ALL task heads for loss to get stronger gradient through shared backbone
             task_targets = targets % self.inc
             loss = sum([criterion(out, task_targets) for out in outputs]) / len(outputs)
-
-            # Backward pass
             loss.backward()
 
-            # Diagonal Fisher: F = sum(grad^2) per parameter
-            step_fisher = 0.0
-            with torch.no_grad():
-                for param in net.parameters():
-                    if param.grad is not None:
-                        step_fisher += param.grad.pow(2).sum().item()
-
-            running_fisher += step_fisher
-
-        # Average over steps
-        fisher_score = running_fisher / n_steps
-
-        # Clean up gradients
-        net.zero_grad()
-
-        return fisher_score
-
-    def calculate_fisher_per_layer(self, net, dataloader):
-        """
-        Calculate per-layer Fisher scores for analysis.
-        Useful for understanding which layers contribute most.
-        """
-        net.train()
-        criterion = nn.CrossEntropyLoss()
-
-        inputs, targets = next(iter(dataloader))
-        inputs, targets = inputs.cuda(), targets.cuda()
-
-        net.zero_grad()
-        outputs = net(inputs)
-        task_targets = targets % self.inc
-        loss = sum([criterion(out, task_targets) for out in outputs]) / len(outputs)
-        loss.backward()
-
-        layer_scores = {}
+        # Aggregate Fisher: sum of abs(F_channel) across all layers and channels
+        fisher_score = 0.0
         with torch.no_grad():
-            for name, param in net.named_parameters():
-                if param.grad is not None:
-                    score = param.grad.pow(2).sum().item()
-                    layer_scores[name] = score
+            for layer in hooked_layers:
+                if layer.fisher is not None:
+                    fisher_score += torch.abs(layer.fisher).sum().item()
 
         net.zero_grad()
-        return layer_scores
+        return fisher_score
 
     def process(self, s):
         depth = self.code[0]
@@ -195,16 +218,20 @@ class FisherEvaluator(object):
         net.apply(init_weights)
         self.log_record('Network initialized with Xavier uniform')
 
-        # Load real data for Fisher computation
-        self.log_record('Loading CIFAR-100 data for Fisher computation...')
-        dataloader = self.get_dataloader(batch_size=64)
+        # Install hooks once, reuse across runs
+        self.log_record('Installing activation-gradient hooks...')
+        hooked_layers = self._install_fisher_hooks(net)
 
         # Calculate Fisher score (average over 3 runs for stability)
-        self.log_record('Calculating Fisher score...')
+        self.log_record('Calculating Fisher score (act*grad method)...')
         fisher_scores = []
         for run in range(3):
+            # Reset Fisher accumulators for each run
+            for layer in hooked_layers:
+                layer.fisher = None
+
             dl = self.get_dataloader(batch_size=64)
-            score = self.calculate_fisher(net, dl, n_steps=1)
+            score = self._calculate_fisher_with_hooks(net, dl, hooked_layers, n_steps=1)
             fisher_scores.append(score)
             self.log_record('Fisher run %d: %.6f' % (run, score))
 
@@ -219,9 +246,17 @@ class FisherEvaluator(object):
         self.log_record('Fisher score (raw std): %.6f' % fisher_std)
         self.log_record('Fitness score (log1p): %.6f' % fitness_score)
 
-        # Optional: Calculate per-layer scores for analysis
+        # Per-layer scores for analysis (reuse existing hooks)
+        for layer in hooked_layers:
+            layer.fisher = None
         dataloader2 = self.get_dataloader(batch_size=64)
-        layer_scores = self.calculate_fisher_per_layer(net, dataloader2)
+        self._run_fisher_forward_backward(net, dataloader2)
+        layer_scores = {}
+        with torch.no_grad():
+            for layer in hooked_layers:
+                if layer.fisher is not None:
+                    layer_scores[layer._fisher_name] = torch.abs(layer.fisher).sum().item()
+        net.zero_grad()
         self.log_record('Layer-wise Fisher scores (top 10):')
         for i, (layer_name, score) in enumerate(sorted(layer_scores.items(), key=lambda x: x[1], reverse=True)):
             if i >= 10:
