@@ -19,13 +19,14 @@ from genetic.evaluate_naswot import NaswotEvaluate
 from genetic.evaluate_fisher import FisherEvaluate
 from genetic.evaluate_gradnorm import GradNormEvaluate
 from genetic.evaluate_grasp import GraSPEvaluate
+from genetic.evaluate_snip import SnipEvaluate
 from genetic.evaluate import FitnessEvaluate
 
 def run_evolve():
     params = {}
     params['pop_size'] = 10   # Population size
     params['max_gen'] = 20    # Maximum number of iteration generations
-    params['eval_mode'] = 4     # Evaluation mode: 0=pytorch_train, 1=synflow
+    params['eval_mode'] = 7     # Evaluation mode: 0=pytorch_train, 1=synflow
     evoCNN = EvolveCNN(params)
     evoCNN.do_work(params)
 
@@ -46,7 +47,11 @@ class EvolveCNN(object):
     def fitness_evaluate(self):
         eval_mode = self.params.get('eval_mode', 0)  # Default to pytorch_train mode
 
-        if eval_mode == 6:
+        if eval_mode == 7:
+            # use SNIP (connection sensitivity with real data)
+            fitness = SnipEvaluate(self.pops.individuals, Log)
+            Log.info('Using SNIP evaluation mode (eval_mode=%d)' % eval_mode)
+        elif eval_mode == 6:
             # use GraSP (Gradient Signal Preservation with real data)
             fitness = GraSPEvaluate(self.pops.individuals, Log)
             Log.info('Using GraSP evaluation mode (eval_mode=%d)' % eval_mode)
@@ -138,7 +143,7 @@ class EvolveCNN(object):
         max_gen = params['max_gen']
         pop_size = params['pop_size']
         eval_mode = params.get('eval_mode', 0)
-        eval_mode_str = {0: 'PyTorch Train', 1: 'Synflow', 2: 'Zen-NAS', 3: 'NASWOT', 4: 'Fisher', 5: 'GradNorm', 6: 'GraSP'}.get(eval_mode, 'Unknown')
+        eval_mode_str = {0: 'PyTorch Train', 1: 'Synflow', 2: 'Zen-NAS', 3: 'NASWOT', 4: 'Fisher', 5: 'GradNorm', 6: 'GraSP', 7: 'SNIP'}.get(eval_mode, 'Unknown')
 
         # START SIGNAL - Important information
         Log.important('='*60)
