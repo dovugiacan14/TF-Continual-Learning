@@ -143,7 +143,10 @@ class FisherEvaluator(object):
         outputs = net(inputs)
 
         task_targets = targets % self.inc
-        loss = sum([criterion(out, task_targets) for out in outputs]) / len(outputs)
+        # Sum loss across all task heads WITHOUT dividing by num_heads.
+        # This matches zero-cost-nas convention (single loss, no averaging)
+        # and produces stronger gradients for more discriminative Fisher scores.
+        loss = sum([criterion(out, task_targets) for out in outputs])
         loss.backward()
 
     def _calculate_fisher_with_hooks(self, net, dataloader, hooked_layers, n_steps=1):
@@ -152,7 +155,7 @@ class FisherEvaluator(object):
 
         Algorithm (adapted from zero-cost-nas Samsung implementation):
         1. Forward pass with real data minibatch
-        2. Compute cross-entropy loss across ALL task heads
+        2. Compute cross-entropy loss across ALL task heads (sum, no averaging)
         3. Backward pass triggers hooks: F_layer = 0.5 * mean_batch((act*grad)^2)
         4. Sum Fisher across all channels of all layers
 
@@ -177,7 +180,7 @@ class FisherEvaluator(object):
             outputs = net(inputs)
 
             task_targets = targets % self.inc
-            loss = sum([criterion(out, task_targets) for out in outputs]) / len(outputs)
+            loss = sum([criterion(out, task_targets) for out in outputs])
             loss.backward()
 
         # Aggregate Fisher: sum of abs(F_channel) across all layers and channels
@@ -263,13 +266,13 @@ class FisherEvaluator(object):
                 break
             self.log_record('  %s: %.6f' % (layer_name, score))
 
-        self.log_record('Fitness score (Fisher): %.3f' % fitness_score)
+        self.log_record('Fitness score (Fisher): %.6f' % fitness_score)
 
         # Store metrics
         self.metrics = {
             'fisher_raw': round(fisher_score, 6),
             'fisher_std': round(fisher_std, 6),
-            'fisher_fitness': round(fitness_score, 3),
+            'fisher_fitness': round(fitness_score, 6),
             'num_params': round(total_params / 1e6, 4)
         }
 
@@ -297,15 +300,14 @@ class RunModel(object):
                              'fisher_std': 0.0,
                              'num_params': 0.0})
 
-            m.log_record('Finished-Fisher:%.3f, Raw:%.6f, Std:%.6f, Params:%.4fM' %
+            m.log_record('Finished-Fisher:%.6f, Raw:%.6f, Std:%.6f, Params:%.4fM' %
                         (metrics['fisher_fitness'],
                          metrics['fisher_raw'],
                          metrics['fisher_std'],
                          metrics['num_params']))
 
             f = open('./populations/after_%s.txt'%(file_id[4:6]), 'a+')
-            # Write fisher metrics in format: indiXXXX={fisher:73.074, raw:..., std:..., params:...}
-            f.write('%s={fisher:%.3f, raw:%.6f, std:%.6f, params:%.4f}\n'%
+            f.write('%s={fisher:%.6f, raw:%.6f, std:%.6f, params:%.4f}\n'%
                    (file_id,
                     metrics['fisher_fitness'],
                     metrics['fisher_raw'],

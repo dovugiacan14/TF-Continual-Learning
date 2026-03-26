@@ -74,7 +74,7 @@ class FisherEvaluate(object):
                             (file_name, indi.acc))
                 f = open('./populations/after_%s.txt'%(file_name[4:6]), 'a+')
                 # Write fisher format
-                f.write('%s={fisher:%.5f, raw:0.0, norm:0.0, params:0.0}\n'%(file_name, indi.acc))
+                f.write('%s={fisher:%.6f, raw:0.0, norm:0.0, params:0.0}\n'%(file_name, indi.acc))
                 f.flush()
                 f.close()
 
