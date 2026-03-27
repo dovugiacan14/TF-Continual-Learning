@@ -1,5 +1,6 @@
 import random
 import time
+import os
 
 from evo_utils import StatusUpdateTool, Utils, Log
 from genetic.population import Population, Individual
@@ -10,8 +11,8 @@ import copy
 
 def run_evolve():
     params = {}
-    params['pop_size'] = 10    # Population size
-    params['max_gen'] = 20    # Maximum number of iteration generations
+    params['pop_size'] = 2    # Population size
+    params['max_gen'] = 3    # Maximum number of iteration generations
     evoCNN = EvolveCNN(params)
     evoCNN.do_work(params)
 
@@ -42,12 +43,15 @@ class EvolveCNN(object):
     def generate_offspring(self):
         cm = Mutation(Log,self.pops.individuals, _params={'gen_no': self.pops.gen_no})
         offspring = cm.process(mut_offspring_num=self.params['pop_size'])
-        
+
         _str = []
         for ind in offspring:
             _str.append(str(ind))
             _str.append('-' * 100)
-        file_name = 'class_il/populations/offspring_%02d.txt' % self.pops.gen_no
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        pop_dir = os.path.join(script_dir, 'populations')
+        os.makedirs(pop_dir, exist_ok=True)
+        file_name = os.path.join(pop_dir, 'offspring_%02d.txt' % self.pops.gen_no)
         with open(file_name, 'w') as f:
             f.write('\n'.join(_str))
 

@@ -13,43 +13,49 @@ class StatusUpdateTool(object):
     @classmethod
     def clear_config(cls):
         config = configparser.ConfigParser()
-        config.read('global.ini')
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        ini_path = os.path.join(script_dir, 'global.ini')
+        config.read(ini_path)
         secs = config.sections()
         for sec_name in secs:
             if sec_name == 'evolution_status' or sec_name == 'gpu_running_status':
                 item_list = config.options(sec_name)
                 for item_name in item_list:
                     config.set(sec_name, item_name, " ")
-        config.write(open('global.ini', 'w'))
+        config.write(open(ini_path, 'w'))
 
     @classmethod
     def __write_ini_file(cls, section, key, value):
         config = configparser.ConfigParser()
-        config.read('global.ini')
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        ini_path = os.path.join(script_dir, 'global.ini')
+        config.read(ini_path)
         config.set(section, key, value)
-        config.write(open('global.ini', 'w'))
+        config.write(open(ini_path, 'w'))
 
     @classmethod
     def __read_ini_file(cls, section, key):
         config = configparser.ConfigParser()
-        config.read('global.ini')
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        ini_path = os.path.join(script_dir, 'global.ini')
+        config.read(ini_path)
         return config.get(section, key)
 
     @classmethod
     def begin_evolution(cls):
         section = 'evolution_status'
-        key = 'IS_RUNNING'
+        key = 'is_running'
         cls.__write_ini_file(section, key, "1")
 
     @classmethod
     def end_evolution(cls):
         section = 'evolution_status'
-        key = 'IS_RUNNING'
+        key = 'is_running'
         cls.__write_ini_file(section, key, "0")
 
     @classmethod
     def is_evolution_running(cls):
-        rs = cls.__read_ini_file('evolution_status', 'IS_RUNNING')
+        rs = cls.__read_ini_file('evolution_status', 'is_running')
         if rs == '1':
             return True
         else:
@@ -64,7 +70,9 @@ class Log(object):
         if Log._logger is None:
             logger = logging.getLogger("EvoCNN")
             formatter = logging.Formatter('%(asctime)s %(levelname)-8s: %(message)s')
-            file_handler = logging.FileHandler("main.log")
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            log_file = os.path.join(script_dir, "main.log")
+            file_handler = logging.FileHandler(log_file)
             file_handler.setFormatter(formatter)
 
             console_handler = logging.StreamHandler(sys.stdout)
@@ -164,7 +172,8 @@ class Utils(object):
 
     @classmethod
     def load_cache_data(cls):
-        file_name = 'class_il/populations/cache.txt'
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        file_name = os.path.join(script_dir, 'populations', 'cache.txt')
         _map = {}
         if os.path.exists(file_name):
             f = open(file_name, 'r')
@@ -177,12 +186,16 @@ class Utils(object):
     @classmethod
     def save_fitness_to_cache(cls, individuals):
         _map = cls.load_cache_data()
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        pop_dir = os.path.join(script_dir, 'populations')
+        os.makedirs(pop_dir, exist_ok=True)
         for indi in individuals:
             _key, _str = indi.uuid()
             _acc = indi.acc
             if _key not in _map:
                 Log.info('Add record into cache, id:%s, acc:%.5f' % (_key, _acc))
-                f = open('class_il/populations/cache.txt', 'a+')
+                file_name = os.path.join(pop_dir, 'cache.txt')
+                f = open(file_name, 'a+')
                 _str = '%s;%.5f;%s\n' % (_key, _acc, _str)
                 f.write(_str)
                 f.close()
@@ -190,29 +203,41 @@ class Utils(object):
 
     @classmethod
     def save_population_at_begin(cls, _str, gen_no):
-        file_name = 'class_il/populations/begin_%02d.txt' % (gen_no)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        pop_dir = os.path.join(script_dir, 'populations')
+        os.makedirs(pop_dir, exist_ok=True)
+        file_name = os.path.join(pop_dir, 'begin_%02d.txt' % (gen_no))
         with open(file_name, 'w') as f:
             f.write(_str)
 
     @classmethod
     def save_population_after_crossover(cls, _str, gen_no):
-        file_name = 'class_il/populations/crossover_%02d.txt' % (gen_no)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        pop_dir = os.path.join(script_dir, 'populations')
+        os.makedirs(pop_dir, exist_ok=True)
+        file_name = os.path.join(pop_dir, 'crossover_%02d.txt' % (gen_no))
         with open(file_name, 'w') as f:
             f.write(_str)
 
     @classmethod
     def save_population_after_mutation(cls, _str, gen_no):
-        file_name = 'class_il/populations/mutation_%02d.txt' % (gen_no)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        pop_dir = os.path.join(script_dir, 'populations')
+        os.makedirs(pop_dir, exist_ok=True)
+        file_name = os.path.join(pop_dir, 'mutation_%02d.txt' % (gen_no))
         with open(file_name, 'w') as f:
             f.write(_str)
 
     @classmethod
     def get_newest_file_based_on_prefix(cls, prefix):
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        pop_dir = os.path.join(script_dir, 'populations')
         id_list = []
-        for _, _, file_names in os.walk('class_il/populations'):
-            for file_name in file_names:
-                if file_name.startswith(prefix):
-                    id_list.append(int(file_name[6:8]))
+        if os.path.exists(pop_dir):
+            for _, _, file_names in os.walk(pop_dir):
+                for file_name in file_names:
+                    if file_name.startswith(prefix):
+                        id_list.append(int(file_name[6:8]))
         if len(id_list) == 0:
             return None
         else:
@@ -220,7 +245,8 @@ class Utils(object):
 
     @classmethod
     def load_population(cls, prefix, gen_no, params):
-        file_name = 'class_il/populations/%s_%02d.txt' % (prefix, np.min(gen_no))
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        file_name = os.path.join(script_dir, 'populations', '%s_%02d.txt' % (prefix, np.min(gen_no)))
         pop = Population(params, gen_no)
         f = open(file_name)
         indi_start_line = f.readline().strip()
@@ -246,7 +272,7 @@ class Utils(object):
 
         # load the fitness to the individuals who have been evaluated, only suitable for the first generation
         if gen_no == 0:
-            after_file_path = 'class_il/populations/after_%02d.txt' % (gen_no)
+            after_file_path = os.path.join(script_dir, 'populations', 'after_%02d.txt' % (gen_no))
             if os.path.exists(after_file_path):
                 fitness_map = {}
             f = open(after_file_path)
@@ -264,7 +290,8 @@ class Utils(object):
 
     @classmethod
     def read_template(cls):
-        _path = 'template.py'
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        _path = os.path.join(script_dir, 'templates', 'template.py')
         part1 = []
         part2 = []
 
@@ -297,7 +324,10 @@ class Utils(object):
         _str.append('\ncode = %s' % str(code))
         _str.extend(part2)
         # print('\n'.join(_str))
-        file_name = 'scripts/%s.py' % (indi.id)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        scripts_dir = os.path.join(script_dir, 'scripts')
+        os.makedirs(scripts_dir, exist_ok=True)
+        file_name = os.path.join(scripts_dir, '%s.py' % (indi.id))
         script_file_handler = open(file_name, 'w')
         script_file_handler.write('\n'.join(_str))
         script_file_handler.flush()
@@ -318,5 +348,6 @@ if __name__ == '__main__':
     #     u = Utils()
     #     u.generate_pytorch_file(indi)
     _str = 'test\n test1'
-    _file = 'class_il/populations/ENV_00.txt'
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    _file = os.path.join(script_dir, 'populations', 'ENV_00.txt')
     Utils.write_to_file(_str, _file)
