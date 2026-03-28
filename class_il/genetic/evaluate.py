@@ -42,10 +42,10 @@ class FitnessEvaluate(object):
         for indi in self.individuals:
             if indi.acc < 0:
                 has_evaluated_offspring = True
-                time.sleep(10)
+                time.sleep(2)
                 gpu_id = GPUTools.detect_available_gpu_id()
                 while gpu_id is None:
-                    time.sleep(10)
+                    time.sleep(2)
                     gpu_id = GPUTools.detect_available_gpu_id()
                 if gpu_id is not None:
                     file_name = indi.id
