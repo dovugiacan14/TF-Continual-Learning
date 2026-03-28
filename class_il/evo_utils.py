@@ -5,7 +5,7 @@ from subprocess import Popen, PIPE
 from genetic.population import Population, Individual
 import logging
 import sys
-import multiprocessing
+import threading
 import time
 
 
@@ -102,10 +102,13 @@ class GPUTools(object):
         output_info = p.stdout.read().decode('UTF-8')
         lines = output_info.split(os.linesep)
         equipped_gpu_ids = []
+        gpu_index = 0
         for line_info in lines:
             if not line_info.startswith(' '):
-                if 'GeForce' in line_info:
-                    equipped_gpu_ids.append(line_info.strip().split(' ', 4)[3])
+                # Support both GeForce and Tesla GPUs (e.g. Kaggle P100)
+                if 'GeForce' in line_info or 'Tesla' in line_info:
+                    equipped_gpu_ids.append(str(gpu_index))
+                    gpu_index += 1
             else:
                 break
 
@@ -137,6 +140,18 @@ class GPUTools(object):
 
     @classmethod
     def detect_available_gpu_id(cls):
+        # Try PyTorch CUDA detection first (more reliable for Kaggle)
+        try:
+            import torch
+            if torch.cuda.is_available():
+                gpu_count = torch.cuda.device_count()
+                Log.info('GPU_QUERY-PyTorch detected %d GPU(s)' % gpu_count)
+                Log.info('GPU_QUERY-Using GPU#0')
+                return 0
+        except:
+            pass
+
+        # Fallback to nvidia-smi method
         unused_gpu_ids = cls.get_available_gpu_ids()
         if len(unused_gpu_ids) == 0:
             Log.info('GPU_QUERY-No available GPU')
@@ -164,7 +179,7 @@ class GPUTools(object):
 
 
 class Utils(object):
-    _lock = multiprocessing.Lock()
+    _lock = threading.Lock()
 
     @classmethod
     def get_lock_for_write_fitness(cls):

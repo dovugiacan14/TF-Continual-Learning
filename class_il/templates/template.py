@@ -3,7 +3,7 @@ import json
 import argparse
 import os
 import sys
-import multiprocessing
+import threading
 from datetime import datetime
 from trainer import train
 from evo_utils import StatusUpdateTool
@@ -65,7 +65,7 @@ class RunModel(object):
         final_aia = 0.0
         m = TrainModel(gpu_id, file_id)
         try:
-            m.log_record('Used GPU#%s, worker name:%s[%d]'%(gpu_id, multiprocessing.current_process().name, os.getpid()), first_time=True)
+            m.log_record('Used GPU#%s, worker name:%s[%d]'%(gpu_id, threading.current_thread().name, os.getpid()), first_time=True)
             final_aia = m.process()
         except BaseException as e:
             print('Exception occurs, file:%s, pid:%d...%s'%(file_id, os.getpid(), str(e)))
