@@ -126,28 +126,10 @@ class FisherEvaluator(object):
                         del layer.act  # Prevent memory leak
                     return hook
 
-                layer.dummy.register_backward_hook(hook_factory(layer))
+                layer.dummy.register_full_backward_hook(hook_factory(layer))
                 hooked_layers.append(layer)
 
         return hooked_layers
-
-    def _run_fisher_forward_backward(self, net, dataloader):
-        """Run a single forward+backward pass (hooks will accumulate Fisher)."""
-        net.train()
-        criterion = nn.CrossEntropyLoss()
-
-        inputs, targets = next(iter(dataloader))
-        inputs, targets = inputs.cuda(), targets.cuda()
-
-        net.zero_grad()
-        outputs = net(inputs)
-
-        task_targets = targets % self.inc
-        # Sum loss across all task heads WITHOUT dividing by num_heads.
-        # This matches zero-cost-nas convention (single loss, no averaging)
-        # and produces stronger gradients for more discriminative Fisher scores.
-        loss = sum([criterion(out, task_targets) for out in outputs])
-        loss.backward()
 
     def _calculate_fisher_with_hooks(self, net, dataloader, hooked_layers, n_steps=1):
         """
@@ -155,7 +137,7 @@ class FisherEvaluator(object):
 
         Algorithm (adapted from zero-cost-nas Samsung implementation):
         1. Forward pass with real data minibatch
-        2. Compute cross-entropy loss across ALL task heads (sum, no averaging)
+        2. Compute cross-entropy loss averaged across task heads
         3. Backward pass triggers hooks: F_layer = 0.5 * mean_batch((act*grad)^2)
         4. Sum Fisher across all channels of all layers
 
@@ -180,15 +162,22 @@ class FisherEvaluator(object):
             outputs = net(inputs)
 
             task_targets = targets % self.inc
-            loss = sum([criterion(out, task_targets) for out in outputs])
+            loss = sum([criterion(out, task_targets) for out in outputs]) / len(outputs)
             loss.backward()
 
-        # Aggregate Fisher: sum of abs(F_channel) across all layers and channels
+        # Normalize Fisher by n_steps when using multiple forward-backward passes
+        if n_steps > 1:
+            with torch.no_grad():
+                for layer in hooked_layers:
+                    if layer.fisher is not None:
+                        layer.fisher /= n_steps
+
+        # Aggregate Fisher: sum of F_channel across all layers and channels
         fisher_score = 0.0
         with torch.no_grad():
             for layer in hooked_layers:
                 if layer.fisher is not None:
-                    fisher_score += torch.abs(layer.fisher).sum().item()
+                    fisher_score += layer.fisher.sum().item()
 
         net.zero_grad()
         return fisher_score
@@ -249,17 +238,12 @@ class FisherEvaluator(object):
         self.log_record('Fisher score (raw std): %.6f' % fisher_std)
         self.log_record('Fitness score (log1p): %.6f' % fitness_score)
 
-        # Per-layer scores for analysis (reuse existing hooks)
-        for layer in hooked_layers:
-            layer.fisher = None
-        dataloader2 = self.get_dataloader(batch_size=64)
-        self._run_fisher_forward_backward(net, dataloader2)
+        # Per-layer scores for analysis (reuse Fisher from last evaluation run)
         layer_scores = {}
         with torch.no_grad():
             for layer in hooked_layers:
                 if layer.fisher is not None:
-                    layer_scores[layer._fisher_name] = torch.abs(layer.fisher).sum().item()
-        net.zero_grad()
+                    layer_scores[layer._fisher_name] = layer.fisher.sum().item()
         self.log_record('Layer-wise Fisher scores (top 10):')
         for i, (layer_name, score) in enumerate(sorted(layer_scores.items(), key=lambda x: x[1], reverse=True)):
             if i >= 10:
