@@ -40,7 +40,7 @@ def _train(args, file_id):
         ],
     )
 
-    _set_random()
+    set_seed(args["seed"])
     _set_device(args)
     print_args(args)
     data_manager = DataManager(
@@ -154,10 +154,11 @@ def _set_device(args):
     args["device"] = gpus
 
 
-def _set_random():
-    torch.manual_seed(1)
-    torch.cuda.manual_seed(1)
-    torch.cuda.manual_seed_all(1)
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 

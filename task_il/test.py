@@ -6,7 +6,7 @@ import torch
 import random
 import torch.backends.cudnn as cudnn
 import dataloaders.cifar100 as dataloader
-from approaches import sgd as approach
+from approaches import ewc as approach
 import utils
 import copy
 

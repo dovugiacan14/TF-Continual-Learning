@@ -11,7 +11,7 @@ import torch.backends.cudnn as cudnn
 import dataloaders.cifar100 as dataloader
 from networks.arch_craft import Net
 from model_code import init_code
-from approaches import sgd as approach
+from approaches import ewc as approach
 import utils
 import copy
 from evo_utils import StatusUpdateTool
