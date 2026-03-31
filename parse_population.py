@@ -79,15 +79,15 @@ def parse_population_file_to_dataframe(file_path: str):
 
 # Example usage
 if __name__ == "__main__":
-    file_path = "begin.txt"
+    file_path = "task_il/populations/begin_19.txt"
 
     # Parse as list of dictionaries
     results = parse_population_file(file_path)
 
     print(f"Found {len(results)} individuals")
-    print("\nAll results:")
+    print("/nAll results:")
     for i, result in enumerate(results):
-        print(f"\n{i+1}. {result['indi']}")
+        print(f"/n{i+1}. {result['indi']}")
         print(f"   Code: {result['code']}")
         print(f"   Accuracy: {result['acc']:.3f}")
 

@@ -2,11 +2,22 @@ import random
 import time
 import os
 from datetime import datetime
+import numpy as np
+import torch
 
 # Auto-detect and change to correct working directory
 script_dir = os.path.dirname(os.path.abspath(__file__))
 if os.getcwd() != script_dir:
     os.chdir(script_dir)
+
+# Set global seed for reproducibility
+SEED = 42
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 
 from evo_utils import StatusUpdateTool, Utils, Log
 from genetic.population import Population, Individual
@@ -26,7 +37,7 @@ def run_evolve():
     params = {}
     params['pop_size'] = 10   # Population size
     params['max_gen'] = 20    # Maximum number of iteration generations
-    params['eval_mode'] = 0    # Evaluation mode: 0=pytorch_train, 1=synflow
+    params['eval_mode'] = 1    # Evaluation mode: 0=pytorch_train, 1=synflow
     evoCNN = EvolveCNN(params)
     evoCNN.do_work(params)
 

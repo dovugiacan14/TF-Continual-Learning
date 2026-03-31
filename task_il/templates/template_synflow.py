@@ -20,6 +20,7 @@ from networks.arch_craft import Net
 from model_code import init_code
 import copy
 import multiprocessing  # Required for RunModel interface compatibility
+import random  # For seed setting
 
 Inc_cls = 5    # Number of classes incremented at each step
 
@@ -147,6 +148,14 @@ class SynflowEvaluator(object):
         return synflow_score, layer_scores
 
     def process(self, s):
+        # Set seed BEFORE any operations for reproducibility
+        random.seed(s)
+        np.random.seed(s)
+        torch.manual_seed(s)
+        torch.cuda.manual_seed_all(s)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
         depth = self.code[0]
         width = self.code[1]
         pool_code = copy.deepcopy(self.code[2])
