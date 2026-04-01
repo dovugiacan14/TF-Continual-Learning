@@ -18,7 +18,7 @@ class Appr(object):
         self.sbatch=sbatch
         self.lr=lr
         self.clipgrad=clipgrad
-        set_seed(0)
+        set_seed(42)
 
         self.criterion=torch.nn.CrossEntropyLoss()
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=0.9, weight_decay=2e-4)

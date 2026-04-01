@@ -29,7 +29,7 @@ def run_test():
     network_choices = ['arch_craft', 'alexnet']
     chosen_network = network_choices[0]
     m = TrainModel(code=code, indi_no=indi_no, network_name=chosen_network)
-    m.process(0)
+    m.process(42)
     
     return
 

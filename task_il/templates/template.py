@@ -172,7 +172,7 @@ class RunModel(object):
         m = TrainModel()
         try:
             m.log_record('Used GPU#%s, worker name:%s[%d]'%(gpu_id, multiprocessing.current_process().name, os.getpid()), first_time=True)
-            best_acc = m.process(s=0)
+            best_acc = m.process(s=42)
             #import random
             #best_acc = random.random()
         except BaseException as e:

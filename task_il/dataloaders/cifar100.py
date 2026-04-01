@@ -5,7 +5,7 @@ import utils
 from torchvision import datasets,transforms
 from sklearn.utils import shuffle
 
-def get(seed=0,pc_valid=0, inc=5):
+def get(seed=42,pc_valid=0, inc=5):
     assert 100%inc == 0
     task_num=100//inc
     data={}

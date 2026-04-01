@@ -233,7 +233,7 @@ class RunModel(object):
         try:
             m.log_record('Used GPU#%s, sequential mode, pid:%d'%
                         (gpu_id, os.getpid()), first_time=True)
-            fitness_score = m.process(s=0)
+            fitness_score = m.process(s=42)
 
         except BaseException as e:
             print('Exception occurs, file:%s, pid:%d...%s'%(file_id, os.getpid(), str(e)))
