@@ -20,6 +20,7 @@ import torch.autograd as autograd
 from networks.arch_craft import Net
 from model_code import init_code
 import copy
+from config import SEED
 import multiprocessing  # Required for RunModel interface compatibility
 import torchvision
 import torchvision.transforms as transforms
@@ -260,7 +261,7 @@ class RunModel(object):
         try:
             m.log_record('Used GPU#%s, sequential mode, pid:%d'%
                         (gpu_id, os.getpid()), first_time=True)
-            fitness_score = m.process(s=42)
+            fitness_score = m.process(s=SEED)
 
         except BaseException as e:
             err_msg = traceback.format_exc()

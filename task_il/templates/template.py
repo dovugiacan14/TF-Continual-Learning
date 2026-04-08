@@ -15,6 +15,7 @@ from approaches import ewc as approach
 import utils
 import copy
 from evo_utils import StatusUpdateTool
+from config import SEED
 
 Inc_cls = 5    # Number of classes incremented at each step
 
@@ -172,7 +173,7 @@ class RunModel(object):
         m = TrainModel()
         try:
             m.log_record('Used GPU#%s, worker name:%s[%d]'%(gpu_id, multiprocessing.current_process().name, os.getpid()), first_time=True)
-            best_acc = m.process(s=42)
+            best_acc = m.process(s=SEED)
             #import random
             #best_acc = random.random()
         except BaseException as e:

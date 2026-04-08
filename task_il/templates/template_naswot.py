@@ -18,6 +18,7 @@ import torch.nn.functional as F
 from networks.arch_craft import Net
 from model_code import init_code
 import copy
+from config import SEED
 import multiprocessing  # Required for RunModel interface compatibility
 import random  # For seed setting
 
@@ -176,7 +177,7 @@ class RunModel(object):
         try:
             m.log_record('Used GPU#%s, sequential mode, pid:%d'%
                         (gpu_id, os.getpid()), first_time=True)
-            fitness_score = m.process(s=42)
+            fitness_score = m.process(s=SEED)
 
         except BaseException as e:
             print('Exception occurs, file:%s, pid:%d...%s'%(file_id, os.getpid(), str(e)))

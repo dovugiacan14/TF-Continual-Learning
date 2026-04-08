@@ -10,8 +10,8 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 if os.getcwd() != script_dir:
     os.chdir(script_dir)
 
-# Set global seed for reproducibility
-SEED = 42
+# Import seed from central config
+from config import SEED
 random.seed(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)
