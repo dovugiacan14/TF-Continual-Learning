@@ -20,26 +20,51 @@ def get(seed=42,pc_valid=0, inc=5):
     original_data_dir = os.path.join(project_dir, 'data')
 
     # Check if dataset needs to be downloaded/processed
+    # Use a lock file to prevent race conditions in parallel processing
+    lock_file = os.path.join(data_dir, '.download_complete.lock')
     need_download = False
-    if not os.path.isdir(data_dir):
+
+    if os.path.exists(lock_file):
+        # Dataset already downloaded and verified, skip all checks
+        need_download = False
+    elif not os.path.isdir(data_dir):
         need_download = True
     else:
-        # Check if directory is empty or missing critical files
-        files = os.listdir(data_dir) if os.path.exists(data_dir) else []
-        if len(files) == 0:
+        # Check if expected files exist (task_num * 4 files: trainx, trainy, testx, testy)
+        expected_files = task_num * 4
+        files = [f for f in os.listdir(data_dir) if f.endswith('.bin')] if os.path.exists(data_dir) else []
+        if len(files) < expected_files:
             need_download = True
-            print(f"Dataset directory exists but is empty. Re-downloading...")
+            print(f"Dataset incomplete ({len(files)}/{expected_files} files). Re-downloading...")
 
     if need_download:
+        # Create lock file BEFORE download to prevent race conditions
         os.makedirs(data_dir, exist_ok=True)
+        with open(lock_file, 'w') as f:
+            f.write('downloading\n')
 
         mean=[0.5071, 0.4867, 0.4408]
         std=[0.2675, 0.2565, 0.2761]
 
-        # CIFAR100
-        dat={}
-        dat['train']=datasets.CIFAR100(original_data_dir,train=True,download=True,transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize(mean,std)]))
-        dat['test']=datasets.CIFAR100(original_data_dir,train=False,download=True,transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize(mean,std)]))
+        # CIFAR100 - with retry logic for HTTP 503 errors
+        max_retries = 3
+        dat = {}
+        for attempt in range(max_retries):
+            try:
+                print(f'Downloading CIFAR100 (attempt {attempt + 1}/{max_retries})...')
+                dat['train']=datasets.CIFAR100(original_data_dir,train=True,download=True,transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize(mean,std)]))
+                dat['test']=datasets.CIFAR100(original_data_dir,train=False,download=True,transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize(mean,std)]))
+                print('Download successful!')
+                break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f'Download failed (attempt {attempt + 1}): {e}')
+                    print('Retrying in 5 seconds...')
+                    import time
+                    time.sleep(5)
+                else:
+                    print(f'Download failed after {max_retries} attempts: {e}')
+                    raise
         for n in range(task_num):
             data[n]={}
             data[n]['name']='cifar100'
@@ -62,6 +87,10 @@ def get(seed=42,pc_valid=0, inc=5):
                 torch.save(data[t][s]['x'], os.path.join(data_dir, 'data'+str(t)+s+'x.bin'))
                 torch.save(data[t][s]['y'], os.path.join(data_dir, 'data'+str(t)+s+'y.bin'))
         print('Dataset processing completed!')
+
+        # Mark download as complete
+        with open(lock_file, 'w') as f:
+            f.write('download_complete\n')
 
     # Load binary files
     data={}
