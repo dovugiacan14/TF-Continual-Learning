@@ -5,7 +5,6 @@ __pycache__/
 .claude/
 .vscode/
 main.log
-dat/
 task_il/data/
 results/
 ZenNAS/
