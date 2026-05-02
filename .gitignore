@@ -6,6 +6,7 @@ __pycache__/
 .vscode/
 main.log
 task_il/data/
+task_il/dat/
 results/
 ZenNAS/
 nas-without-training/
