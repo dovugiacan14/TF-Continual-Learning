@@ -79,7 +79,7 @@ def parse_population_file_to_dataframe(file_path: str):
 
 # Example usage
 if __name__ == "__main__":
-    file_path = "begin.txt"
+    file_path = "task_il/populations/begin_19.txt"
 
     # Parse as list of dictionaries
     results = parse_population_file(file_path)
