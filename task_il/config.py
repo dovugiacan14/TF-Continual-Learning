@@ -1,3 +1,3 @@
 # Central configuration for evolution experiments
 # Change SEED here to affect ALL components (evolution + training + data loading)
-SEED = 43
+SEED = 44
