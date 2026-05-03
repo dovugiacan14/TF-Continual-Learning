@@ -115,7 +115,7 @@ class FisherEvaluator(object):
 
         # Simple Dataset class to load from binary files
         class CIFAR100BinaryDataset(torch.utils.data.Dataset):
-            def __init__(self, data_dir, train=True):
+            def __init__(self, data_dir, train=True, file_id='unknown'):
                 self.data_dir = data_dir
                 self.train = train
                 self.data = []
@@ -138,7 +138,7 @@ class FisherEvaluator(object):
                     self.data = torch.cat(self.data, dim=0)
                     self.targets = torch.cat(self.targets, dim=0)
 
-                print(f'[indi{self.file_id[4:]}] Loaded {len(self.data)} samples from {data_dir} ({split})')
+                print(f'[indi{file_id[4:]}] Loaded {len(self.data)} samples from {data_dir} ({split})')
 
             def __len__(self):
                 return len(self.data)
@@ -148,7 +148,7 @@ class FisherEvaluator(object):
                 return self.data[idx], self.targets[idx]
 
         # Create dataset
-        dataset = CIFAR100BinaryDataset(data_dir, train=True)
+        dataset = CIFAR100BinaryDataset(data_dir, train=True, file_id=self.file_id)
 
         dataloader = torch.utils.data.DataLoader(
             dataset, batch_size=batch_size, shuffle=True, num_workers=0
