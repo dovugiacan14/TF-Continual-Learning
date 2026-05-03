@@ -25,8 +25,57 @@ import multiprocessing  # Required for RunModel interface compatibility
 import torchvision
 import torchvision.transforms as transforms
 import random  # For seed setting
+import time    # For delays during download retries
 
 Inc_cls = 5    # Number of classes incremented at each step
+
+# Helper function to download CIFAR100 from mirror (original link often returns 503)
+def download_cifar100_from_mirror(root='./data'):
+    """Download CIFAR100 from mirror when official link is down"""
+    import urllib.request
+    import tarfile
+    import hashlib
+
+    os.makedirs(root, exist_ok=True)
+
+    # Multiple mirror sources
+    mirrors = [
+        'https://www.cs.toronto.edu/~kriz/cifar-100-python.tar.gz',  # Original
+        'https://github.com/akhilpandey95/CIFAR-100-images/raw/master/cifar-100-python.tar.gz',  # GitHub mirror
+    ]
+
+    filename = 'cifar-100-python.tar.gz'
+    filepath = os.path.join(root, filename)
+
+    # Check if already exists
+    if os.path.exists(filepath):
+        print(f'[CIFAR100] Already exists at {filepath}')
+        return filepath
+
+    # Try each mirror
+    for i, url in enumerate(mirrors):
+        try:
+            print(f'[CIFAR100] Attempting download from mirror {i+1}/{len(mirrors)}...')
+            print(f'[CIFAR100] URL: {url}')
+
+            urllib.request.urlretrieve(url, filepath)
+            print(f'[CIFAR100] ✅ Download successful from mirror {i+1}')
+
+            # Extract
+            print(f'[CIFAR100] Extracting...')
+            with tarfile.open(filepath, 'r:gz') as tar:
+                tar.extractall(path=root)
+            print(f'[CIFAR100] ✅ Extraction complete')
+
+            return filepath
+
+        except Exception as e:
+            print(f'[CIFAR100] ❌ Mirror {i+1} failed: {e}')
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            continue
+
+    raise Exception(f'[CIFAR100] ❌ All mirrors failed. Please download manually and place in {root}')
 
 # Auto-detect and change to correct working directory (task_il/)
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -59,16 +108,47 @@ class FisherEvaluator(object):
         """
         Load a single minibatch of CIFAR-100 for Fisher computation.
         Fisher only needs one forward+backward pass with real data.
+        Uses pre-processed binary files from dat/ directory.
         """
-        transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.5071, 0.4867, 0.4408),
-                                 (0.2675, 0.2565, 0.2761)),
-        ])
+        # Load from pre-processed binary files (task_il/dat/binary_cifar_inc5/)
+        data_dir = './dat/binary_cifar_inc5'
 
-        dataset = torchvision.datasets.CIFAR100(
-            root='./data', train=True, download=True, transform=transform
-        )
+        # Simple Dataset class to load from binary files
+        class CIFAR100BinaryDataset(torch.utils.data.Dataset):
+            def __init__(self, data_dir, train=True):
+                self.data_dir = data_dir
+                self.train = train
+                self.data = []
+                self.targets = []
+
+                # Load all 20 tasks (0-19 for CIFAR-100 with 5 classes per task)
+                for task_id in range(20):
+                    split = 'train' if train else 'test'
+                    data_file = os.path.join(data_dir, f'data{task_id}{split}x.bin')
+                    label_file = os.path.join(data_dir, f'data{task_id}{split}y.bin')
+
+                    if os.path.exists(data_file) and os.path.exists(label_file):
+                        x = torch.load(data_file)
+                        y = torch.load(label_file)
+                        self.data.append(x)
+                        self.targets.append(y)
+
+                # Concatenate all tasks
+                if self.data:
+                    self.data = torch.cat(self.data, dim=0)
+                    self.targets = torch.cat(self.targets, dim=0)
+
+                print(f'[indi{self.file_id[4:]}] Loaded {len(self.data)} samples from {data_dir} ({split})')
+
+            def __len__(self):
+                return len(self.data)
+
+            def __getitem__(self, idx):
+                # Data is already normalized, just return as tensor
+                return self.data[idx], self.targets[idx]
+
+        # Create dataset
+        dataset = CIFAR100BinaryDataset(data_dir, train=True)
 
         dataloader = torch.utils.data.DataLoader(
             dataset, batch_size=batch_size, shuffle=True, num_workers=0
