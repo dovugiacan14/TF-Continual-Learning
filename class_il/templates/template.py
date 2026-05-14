@@ -19,7 +19,7 @@ def load_json(settings_path):
 
 def setup_parser():
     parser = argparse.ArgumentParser(description='Reproduce of multiple continual learning algorthms.')
-    parser.add_argument('--config', type=str, default='class_il/exps/replay_for_evolve.json',
+    parser.add_argument('--config', type=str, default='class_il/exps/ewc.json',
                         help='Json file of settings.')
 
     return parser
