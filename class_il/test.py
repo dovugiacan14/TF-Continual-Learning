@@ -2,7 +2,6 @@ import json
 import argparse
 import os
 import sys
-import multiprocessing
 from datetime import datetime
 from trainer import train
 from evo_utils import StatusUpdateTool
@@ -62,7 +61,9 @@ class TrainModel(object):
             file_mode = 'w'
         else:
             file_mode = 'a+'
-        f = open('class_il/log/%s.txt'%(self.file_id), file_mode)
+        log_path = 'class_il/log/%s.txt' % (self.file_id)
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        f = open(log_path, file_mode)
         f.write('[%s]-%s\n'%(dt, _str))
         f.flush()
         f.close()

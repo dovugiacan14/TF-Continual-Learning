@@ -31,6 +31,7 @@ def _train(args, file_id):
     #     os.makedirs(logs_name)
 
     logfilename = 'class_il/log/%s.txt'%(file_id)
+    os.makedirs(os.path.dirname(logfilename), exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(filename)s] => %(message)s",

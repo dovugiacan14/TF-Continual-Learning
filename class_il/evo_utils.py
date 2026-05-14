@@ -5,7 +5,6 @@ from subprocess import Popen, PIPE
 from genetic.population import Population, Individual
 import logging
 import sys
-import threading
 import time
 
 
@@ -179,11 +178,6 @@ class GPUTools(object):
 
 
 class Utils(object):
-    _lock = threading.Lock()
-
-    @classmethod
-    def get_lock_for_write_fitness(cls):
-        return cls._lock
 
     @classmethod
     def load_cache_data(cls):

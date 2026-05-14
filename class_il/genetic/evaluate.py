@@ -1,6 +1,6 @@
-from evo_utils import Utils, GPUTools
+from evo_utils import Utils
 import importlib
-import time, os, sys
+import os, sys
 
 
 class FitnessEvaluate(object):
@@ -32,48 +32,29 @@ class FitnessEvaluate(object):
         self.log.info('Total hit %d individuals for fitness'%(_count))
 
         has_evaluated_offspring = False
+        gpu_id = 0
         for indi in self.individuals:
             if indi.acc < 0:
                 has_evaluated_offspring = True
-                # time.sleep(2)
-                gpu_id = GPUTools.detect_available_gpu_id()
-                while gpu_id is None:
-                    time.sleep(10)
-                    gpu_id = GPUTools.detect_available_gpu_id()
-                if gpu_id is not None:
-                    file_name = indi.id
-                    self.log.info('Begin to train %s'%(file_name))
-                    module_name = 'scripts.%s'%(file_name)
-                    if module_name in sys.modules.keys():
-                        self.log.info('Module:%s has been loaded, delete it'%(module_name))
-                        del sys.modules[module_name]
-                        _module = importlib.import_module('.', module_name)
-                    else:
-                        _module = importlib.import_module('.', module_name)
-                    _class = getattr(_module, 'RunModel')
-                    cls_obj = _class()
-                    cls_obj.do_work('%d' % gpu_id, file_name)
+                file_name = indi.id
+                self.log.info('Begin to train %s' % (file_name))
+                module_name = 'scripts.%s' % (file_name)
+                if module_name in sys.modules.keys():
+                    self.log.info('Module:%s has been loaded, delete it' % (module_name))
+                    del sys.modules[module_name]
+                _module = importlib.import_module('.', module_name)
+                _class = getattr(_module, 'RunModel')
+                cls_obj = _class()
+                cls_obj.do_work('%d' % gpu_id, file_name)
             else:
                 file_name = indi.id
-                self.log.info('%s has inherited the fitness as %.5f, no need to evaluate'%(file_name, indi.acc))
-                f = open('class_il/populations/after_%s.txt'%(file_name[4:6]), 'a+')
-                f.write('%s=%.5f\n'%(file_name, indi.acc))
+                self.log.info('%s has inherited the fitness as %.5f, no need to evaluate' % (file_name, indi.acc))
+                after_path = 'class_il/populations/after_%s.txt' % (file_name[4:6])
+                os.makedirs(os.path.dirname(after_path), exist_ok=True)
+                f = open(after_path, 'a+')
+                f.write('%s=%.5f\n' % (file_name, indi.acc))
                 f.flush()
                 f.close()
-
-        if has_evaluated_offspring:
-            all_finished = False
-            while all_finished is not True:
-                has_nums = 0
-                # time.sleep(2)
-                file_name = 'class_il/populations/after_%s.txt' % (self.individuals[0].id[4:6])
-                assert os.path.exists(file_name) is True
-                f = open(file_name, 'r')
-                for line in f:
-                    if len(line.strip()) > 0:
-                        has_nums += 1
-                if has_nums >= len(self.individuals):
-                    all_finished = True
         """
         When the codes run to here, it means all the individuals in this generation have been evaluated, then to save to the list with the key and value
         Before doing so, individuals that have been evaluated in this run should retrieval their fitness first.
