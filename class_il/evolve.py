@@ -111,6 +111,7 @@ class EvolveCNN(object):
         Log.info('EVOLVE[%d-gen]-Begin to evaluate the fitness'%(gen_no))
         self.fitness_evaluate()
         Log.info('EVOLVE[%d-gen]-Finish the evaluation'%(gen_no))
+        print(f'==================== GENERATION {gen_no} DONE.! ===================')
         gen_no += 1
         self.pops.gen_no += 1
         for curr_gen in range(gen_no, max_gen):
@@ -125,6 +126,7 @@ class EvolveCNN(object):
             Log.info('EVOLVE[%d-gen]-Finish the evaluation'%(curr_gen))
             self.environment_selection()
             Log.info('EVOLVE[%d-gen]-Finish the environment selection'%(curr_gen))
+            print(f'==================== GENERATION {curr_gen} DONE.! ===================')
 
         self.params['gen_no'] = max_gen
         self.generate_offspring()
