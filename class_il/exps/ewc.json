@@ -8,7 +8,7 @@
     "init_cls": 5,
     "increment": 5,
     "model_name": "ewc",
-    "convnet_type": "rbnet",
-    "device": ["0","1","2","3"],
+    "convnet_type": "arch_craft",
+    "device": ["0"],
     "seed": [42]
 }
