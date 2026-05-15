@@ -23,7 +23,9 @@ def load_json(settings_path):
 
 def setup_parser():
     parser = argparse.ArgumentParser(description='Reproduce of multiple continual learning algorthms.')
-    parser.add_argument('--config', type=str, default='class_il/exps/wa.json',
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    parser.add_argument('--config', type=str,
+                        default=os.path.join(base_dir, 'exps', 'wa.json'),
                         help='Json file of settings.')
 
     return parser
@@ -61,7 +63,8 @@ class TrainModel(object):
             file_mode = 'w'
         else:
             file_mode = 'a+'
-        log_path = 'class_il/log/%s.txt' % (self.file_id)
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        log_path = os.path.join(base_dir, 'log', '%s.txt' % self.file_id)
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
         f = open(log_path, file_mode)
         f.write('[%s]-%s\n'%(dt, _str))

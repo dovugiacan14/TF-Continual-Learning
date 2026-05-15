@@ -2,6 +2,8 @@ from evo_utils import Utils
 import importlib
 import os, sys
 
+_CLASS_IL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 class FitnessEvaluate(object):
 
@@ -49,7 +51,7 @@ class FitnessEvaluate(object):
             else:
                 file_name = indi.id
                 self.log.info('%s has inherited the fitness as %.5f, no need to evaluate' % (file_name, indi.acc))
-                after_path = 'class_il/populations/after_%s.txt' % (file_name[4:6])
+                after_path = os.path.join(_CLASS_IL_DIR, 'populations', 'after_%s.txt' % file_name[4:6])
                 os.makedirs(os.path.dirname(after_path), exist_ok=True)
                 f = open(after_path, 'a+')
                 f.write('%s=%.5f\n' % (file_name, indi.acc))
@@ -60,7 +62,7 @@ class FitnessEvaluate(object):
         Before doing so, individuals that have been evaluated in this run should retrieval their fitness first.
         """
         if has_evaluated_offspring:
-            file_name = 'class_il/populations/after_%s.txt'%(self.individuals[0].id[4:6])
+            file_name = os.path.join(_CLASS_IL_DIR, 'populations', 'after_%s.txt' % self.individuals[0].id[4:6])
             assert os.path.exists(file_name) is True
             f = open(file_name, 'r')
             fitness_map = {}
@@ -77,7 +79,7 @@ class FitnessEvaluate(object):
                     indi.acc = fitness_map[indi.id]
 
             Utils.save_fitness_to_cache(self.individuals)
-            history_path = 'class_il/populations/history.txt'
+            history_path = os.path.join(_CLASS_IL_DIR, 'populations', 'history.txt')
             os.makedirs(os.path.dirname(history_path), exist_ok=True)
             f = open(history_path, 'a+')
             _str = []

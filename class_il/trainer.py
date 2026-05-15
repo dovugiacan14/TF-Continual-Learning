@@ -30,7 +30,8 @@ def _train(args, file_id):
     # if not os.path.exists(logs_name):
     #     os.makedirs(logs_name)
 
-    logfilename = 'class_il/log/%s.txt'%(file_id)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    logfilename = os.path.join(base_dir, 'log', '%s.txt' % file_id)
     os.makedirs(os.path.dirname(logfilename), exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
