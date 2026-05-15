@@ -74,8 +74,10 @@ class RunModel(object):
         finally:
             m.log_record('Finished-AIA (CNN): %.4f'%final_aia)
 
-            f = open('class_il/populations/after_%s.txt'%(file_id[4:6]), 'a+')
-            f.write('%s=%.5f\n'%(file_id, final_aia))
+            after_path = 'class_il/populations/after_%s.txt' % (file_id[4:6])
+            os.makedirs(os.path.dirname(after_path), exist_ok=True)
+            f = open(after_path, 'a+')
+            f.write('%s=%.5f\n' % (file_id, final_aia))
             f.flush()
             f.close()
 

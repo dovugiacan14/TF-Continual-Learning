@@ -77,7 +77,9 @@ class FitnessEvaluate(object):
                     indi.acc = fitness_map[indi.id]
 
             Utils.save_fitness_to_cache(self.individuals)
-            f = open('class_il/populations/history.txt', 'a+')
+            history_path = 'class_il/populations/history.txt'
+            os.makedirs(os.path.dirname(history_path), exist_ok=True)
+            f = open(history_path, 'a+')
             _str = []
             for ind in self.individuals:
                 if ind.acc > 0.0:
