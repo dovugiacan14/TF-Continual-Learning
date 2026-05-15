@@ -1,5 +1,6 @@
 import random
 import os
+import time
 
 from evo_utils import StatusUpdateTool, Utils, Log
 from genetic.population import Population, Individual
@@ -9,11 +10,17 @@ import numpy as np
 import copy
 
 def run_evolve():
+    start_time = time.time()
     params = {}
     params['pop_size'] = 2    # Population size
     params['max_gen'] = 3    # Maximum number of iteration generations
     evoCNN = EvolveCNN(params)
     evoCNN.do_work(params)
+    elapsed = time.time() - start_time
+    hours, rem = divmod(elapsed, 3600)
+    minutes, seconds = divmod(rem, 60)
+    print('==================== TOTAL EVOLVE TIME: %dh %dm %.2fs (%.2f sec) ====================' % (
+        int(hours), int(minutes), seconds, elapsed))
 
 class EvolveCNN(object):
     def __init__(self, params):
