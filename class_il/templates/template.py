@@ -16,9 +16,13 @@ def load_json(settings_path):
     return param
 
 
+_CLASS_IL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
 def setup_parser():
     parser = argparse.ArgumentParser(description='Reproduce of multiple continual learning algorthms.')
-    parser.add_argument('--config', type=str, default='class_il/exps/ewc.json',
+    parser.add_argument('--config', type=str,
+                        default=os.path.join(_CLASS_IL_DIR, 'exps', 'ewc.json'),
                         help='Json file of settings.')
 
     return parser
@@ -53,7 +57,7 @@ class TrainModel(object):
             file_mode = 'w'
         else:
             file_mode = 'a+'
-        log_path = 'class_il/log/%s.txt' % (self.file_id)
+        log_path = os.path.join(_CLASS_IL_DIR, 'log', '%s.txt' % self.file_id)
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
         f = open(log_path, file_mode)
         f.write('[%s]-%s\n'%(dt, _str))
@@ -74,7 +78,7 @@ class RunModel(object):
         finally:
             m.log_record('Finished-AIA (CNN): %.4f'%final_aia)
 
-            after_path = 'class_il/populations/after_%s.txt' % (file_id[4:6])
+            after_path = os.path.join(_CLASS_IL_DIR, 'populations', 'after_%s.txt' % file_id[4:6])
             os.makedirs(os.path.dirname(after_path), exist_ok=True)
             f = open(after_path, 'a+')
             f.write('%s=%.5f\n' % (file_id, final_aia))
